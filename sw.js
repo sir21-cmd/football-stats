@@ -1,7 +1,7 @@
 /* Varsity Football Stats — offline service worker.
    index.html is network-first (so a re-upload reaches everyone next time they
    have signal) with a cache fallback; everything else is cache-first. */
-const VERSION = 'vfs-2026-08-15-1';
+const VERSION = 'vfs-2026-08-15-2';
 const SHELL = [
   './',
   './index.html',
@@ -32,8 +32,10 @@ self.addEventListener('fetch', e => {
   const isDoc = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html');
 
   if (isDoc) {
+    // bypass the browser's own HTTP cache — otherwise an iPhone can sit on a
+    // stale copy for as long as the host's max-age says, even when online
     e.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-store' })
         .then(res => {
           const copy = res.clone();
           caches.open(VERSION).then(c => c.put('./index.html', copy));
