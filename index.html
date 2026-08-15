@@ -1312,24 +1312,37 @@ function playerForm(idx){
       <div class="f3">
         <div class="field"><label class="f">Number</label><input type="text" id="pN" value="${esc(p.num)}" inputmode="numeric"></div>
         <div class="field"><label class="f">Name</label><input type="text" id="pNm" value="${esc(p.name||'')}"></div>
-        <div class="field"><label class="f">Position</label><input type="text" id="pP" value="${esc(p.pos||'')}"></div>
+        <div class="field"><label class="f">Position(s)</label><input type="text" id="pP" value="${esc(p.pos||'')}" placeholder="RB/LB"></div>
       </div>
       <button class="btn p wide" id="pSave">Save</button>
     </div>`, body=>{
       $('#pSave',body).onclick=()=>{
         const num=$('#pN',body).value.trim(); if(!num){ toast('Jersey number required'); return; }
-        const rec={num:num, name:$('#pNm',body).value.trim(), pos:$('#pP',body).value.trim().toUpperCase()};
+        const rec={num:num, name:$('#pNm',body).value.trim(),
+                   pos:$('#pP',body).value.trim().toUpperCase().replace(/[\s,|-]+/g,'/').replace(/\/+/g,'/')};
         if(idx==null){ if(DB.roster.some(x=>String(x.num)===num)){ toast('#'+num+' already on the roster'); return; } DB.roster.push(rec); }
         else DB.roster[idx]=rec;
         sortRoster(); save(); closeModal(); render(); toast('Roster saved');
       };
     });
 }
+/* known position codes, so a paste can tell "RB/LB" from part of a surname */
+const KNOWN_POS = new Set(['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','WB','ATH','UTIL',
+  'OL','OT','OG','G','T','C','LS','DL','DE','DT','NT','NG','EDGE',
+  'LB','ILB','OLB','MLB','WLB','SLB','DB','CB','S','FS','SS','SAF','NB',
+  'K','P','PK','KR','PR','H']);
+function parsePos(tok){
+  if(!tok) return null;
+  const parts = String(tok).toUpperCase().split(/[\/\-,|]/).map(s=>s.trim()).filter(Boolean);
+  if(!parts.length) return null;
+  return parts.every(p=>KNOWN_POS.has(p)) ? parts.join('/') : null;
+}
 function pasteRoster(){
   openModal('Paste roster', `
     <div class="card">
-      <p class="small muted">One player per line. Number first, then name, then position — commas, tabs or spaces all work.</p>
-      <textarea id="rTxt" placeholder="12 Jake Miller QB&#10;34, Richard Sanchez, RB&#10;87 Gary Parks WR" style="min-height:180px"></textarea>
+      <p class="small muted">One player per line: number, name, then positions. Commas, tabs or spaces all work.
+      For two-way players list both — <b>RB/LB</b> or just <b>RB LB</b>. Offense first is the convention, but either order is fine.</p>
+      <textarea id="rTxt" placeholder="12 Jake Miller QB&#10;34, Richard Sanchez, RB/LB&#10;87 Gary Parks WR DB&#10;55 Tom Hill OL DL" style="min-height:180px"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="btn p grow" id="rGo">Add players</button>
         <label class="small"><input type="checkbox" id="rWipe"> replace roster</label>
@@ -1339,12 +1352,18 @@ function pasteRoster(){
         const lines=$('#rTxt',body).value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
         const out=[];
         lines.forEach(l=>{
-          let parts = l.includes(',')? l.split(',').map(s=>s.trim()) : l.split(/\s+/);
+          let parts = l.includes(',') ? l.split(',').map(s=>s.trim()).filter(Boolean)
+                                      : l.trim().split(/\s+/);
           let num=(parts.shift()||'').replace(/[^0-9]/g,'');
           if(!num) return;
-          let pos='';
-          if(parts.length>1 && /^[A-Za-z\/]{1,6}$/.test(parts[parts.length-1])) pos=parts.pop().toUpperCase();
-          out.push({num:num, name:parts.join(' ').trim(), pos:pos});
+          const pos=[];
+          while(parts.length>1){                       // keep at least one token for the name
+            const p=parsePos(parts[parts.length-1]);
+            if(!p) break;
+            p.split('/').reverse().forEach(x=>{ if(!pos.includes(x)) pos.unshift(x); });
+            parts.pop();
+          }
+          out.push({num:num, name:parts.join(' ').trim(), pos:pos.join('/')});
         });
         if(!out.length){ toast('Could not read any players'); return; }
         if($('#rWipe',body).checked) DB.roster=[];
