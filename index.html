@@ -96,12 +96,8 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
   min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; cursor:pointer}
 .chip b{font-size:1.15rem; font-variant-numeric:tabular-nums; line-height:1}
 .chip span{font-size:.66rem; color:var(--muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.chip .cnum{display:flex; align-items:center; justify-content:center; gap:4px; max-width:100%}
-.chip .cpos{font-style:normal; font-size:.6rem; font-weight:800; letter-spacing:.03em; line-height:1;
-  color:#fff; background:#94a3b8; border-radius:4px; padding:2px 4px; flex:none}
 .chip.on{border-color:var(--accent); background:#eff6ff; box-shadow:inset 0 0 0 1.5px var(--accent)}
 .chip.on span{color:var(--accent)}
-.chip.on .cpos{background:var(--accent); color:#fff}
 
 .flags{display:flex; flex-wrap:wrap; gap:6px}
 .flag{border:1.5px solid var(--line); background:var(--paper); border-radius:20px; padding:8px 13px; font-size:.83rem; font-weight:700; min-height:40px}
@@ -380,12 +376,6 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
         <button class="btn sm ghost" id="btnHelp">How to use</button>
       </div>
       <p class="tiny muted" style="margin-top:8px">Everything lives on this device. Back up after each game — clearing your browser data will erase it.</p>
-      <hr>
-      <div class="spread">
-        <div><b class="small">App version</b> <span class="pill" id="appVer">—</span>
-          <div class="tiny muted">Every device should show the same version.</div></div>
-        <button class="btn sm ghost" id="btnUpdate">Check for update</button>
-      </div>
     </div>
   </section>
 </main>
@@ -403,7 +393,6 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.15-3';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -746,30 +735,15 @@ function chipsHTML(role, sel, opts){
   if(rec.length && !opts.noRecent){
     h+='<div class="tiny muted" style="margin:2px 0 4px">Recent</div><div class="chips" style="margin-bottom:8px">';
     rec.forEach(n=>{ const p=player(n); if(!p) return;
-      h+=`<button class="chip ${String(sel)===String(n)?'on':''}" data-pick="${esc(role)}" data-num="${esc(n)}">${chipInner(p,role)}</button>`; });
+      h+=`<button class="chip ${String(sel)===String(n)?'on':''}" data-pick="${esc(role)}" data-num="${esc(n)}"><b>${esc(p.num)}</b><span>${esc(p.name)}</span></button>`; });
     h+='</div>';
   }
   h+='<div class="chips">';
   orderedRoster(role).forEach(p=>{
-    h+=`<button class="chip ${String(sel)===String(p.num)?'on':''}" data-pick="${esc(role)}" data-num="${esc(p.num)}">${chipInner(p,role)}</button>`;
+    h+=`<button class="chip ${String(sel)===String(p.num)?'on':''}" data-pick="${esc(role)}" data-num="${esc(p.num)}"><b>${esc(p.num)}</b><span>${esc(p.name||p.pos||'')}</span></button>`;
   });
   h+='</div>';
   return h;
-}
-/* the position shown is the one that matters for this job — a WR/DB reads
-   "WR" when you're picking a receiver and "DB" when you're tagging a tackle */
-function rolePos(p, role){
-  const pos=(p.pos||'').toUpperCase();
-  if(!pos) return '';
-  const parts=pos.split('/').map(s=>s.trim()).filter(Boolean);
-  const want=ROLE_POS[role];
-  if(want){ const hit=parts.find(x=>want.indexOf(x)>=0); if(hit) return hit; }
-  return parts[0]||'';
-}
-function chipInner(p, role){
-  const pos=rolePos(p,role);
-  return `<span class="cnum"><b>${esc(p.num)}</b>${pos?`<i class="cpos">${esc(pos)}</i>`:''}</span>`+
-         `<span>${esc(p.name||'')}</span>`;
 }
 /* likely players for the job float to the front — nobody is hidden */
 const ROLE_POS = {
@@ -1531,8 +1505,6 @@ function wire(){
     else toast('That file is not a stats backup');
   });
   $('#btnHelp').onclick=showHelp;
-  $('#appVer').textContent = APP_VERSION;
-  $('#btnUpdate').onclick=forceUpdate;
   $('#filePick').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
     const r=new FileReader();
@@ -1555,21 +1527,6 @@ function wire(){
   $('#btnMergeImport').onclick=()=>pickFile(obj=>{
     if(obj.kind==='vfstats.game') importGameFile(obj); else toast('Pick a game file exported from the other device');
   });
-}
-
-/* Clears the offline cache and reloads. Games, roster and season totals live in
-   local storage and are NOT touched by this — only the cached copy of the app. */
-async function forceUpdate(){
-  saveNow();
-  toast('Fetching the latest version…');
-  try{
-    if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); }
-    if(navigator.serviceWorker){
-      const regs=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r=>r.unregister().catch(()=>{})));
-    }
-  }catch(e){}
-  setTimeout(()=>location.reload(true), 400);
 }
 
 function confirmBox(msg, cb){
