@@ -416,7 +416,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
   <div id="modalBody"></div>
 </div></div>
 <div id="toast"></div>
-<input type="file" id="filePick" accept=".json,application/json" class="hide">
+<input type="file" id="filePick" accept=".json,.txt,application/json,text/plain,application/octet-stream" class="hide">
 <script>
 /* =========================================================================
    Varsity Football Stats — offline play-by-play stat keeper
@@ -424,7 +424,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.16-9';
+const APP_VERSION = '2026.08.16-10';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
