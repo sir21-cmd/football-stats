@@ -106,6 +106,34 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
 .chip.prime .cpos{background:var(--ink)}
 .chip.prime.on{border-color:var(--accent); background:#eff6ff}
 .flag.ghost{border-style:dashed; color:var(--muted); font-weight:600}
+/* ---------- field strip ---------- */
+.gridiron{position:relative; height:42px; border-radius:8px; overflow:hidden;
+  background:#d8e3ec; border:1px solid #c3d0db; margin:10px 0 2px}
+.gridiron.tap{height:54px; margin:6px 0 8px; cursor:pointer; border-color:#94a3b8}
+.gridiron .fz{position:absolute; top:0; bottom:0; width:8.3333%; background:var(--ink2);
+  display:flex; align-items:center; justify-content:center}
+.gridiron .fz.l{left:0} .gridiron .fz.r{right:0}
+.gridiron .fz span{color:#fff; font-size:.5rem; font-weight:800; letter-spacing:.05em}
+.gridiron .fl{position:absolute; top:0; bottom:0; width:1px; background:#0f172a; opacity:.45}
+.gridiron .fl.mid{width:2px; opacity:.85}
+.gridiron .fn{position:absolute; top:50%; transform:translate(-50%,-50%); pointer-events:none;
+  font-size:.5rem; font-weight:800; color:#64748b; opacity:.6; letter-spacing:.02em; font-style:normal}
+.gridiron.tap .fn{font-size:.62rem; opacity:.55}
+@media(max-width:560px){ .gridiron .fn:not(.key){display:none} }
+.gridiron .flos{position:absolute; top:0; bottom:0; width:3px; margin-left:-1px; background:transparent;
+  background-image:repeating-linear-gradient(to bottom, #0f172a 0 4px, transparent 4px 7px)}
+.gridiron .ffd{position:absolute; top:0; bottom:0; width:3px; background:#eab308; box-shadow:0 0 0 1px #ffffff90}
+.gridiron .fball{position:absolute; top:50%; width:26px; height:26px; margin:-13px 0 0 -13px;
+  border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px #fff, 0 1px 4px #0f172a66;
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-style:normal; font-size:.62rem; font-weight:800; letter-spacing:-.02em}
+.gridiron .fball::after{content:''; position:absolute; top:50%; margin-top:-4px; border:4px solid transparent}
+.gridiron .fball.r::after{left:28px; border-left-color:var(--accent)}
+.gridiron .fball.l::after{right:28px; border-right-color:var(--accent)}
+.gridiron.tap .fball{background:var(--go); width:30px; height:30px; margin:-15px 0 0 -15px; font-size:.7rem}
+.gridiron.tap .fball::after{display:none}
+.fieldkey{display:flex; gap:12px; font-size:.62rem; color:var(--muted); margin:0 0 2px}
+.fieldkey b{font-weight:700}
 .penlist{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:6px}
 .pen{display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left;
   border:1.5px solid var(--line); background:var(--paper); border-radius:10px; min-height:44px;
@@ -271,6 +299,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
           </div>
           <button class="btn sm ghost" id="btnEditSit">Fix down / spot</button>
         </div>
+        <div id="fieldStrip"></div>
       </div>
 
       <div class="card" id="entryCard">
@@ -424,7 +453,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.16-10';
+const APP_VERSION = '2026.08.16-17';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -494,9 +523,11 @@ function saveNow(){ clearTimeout(saveTimer); try{ localStorage.setItem(LS, JSON.
 /* ---------- game accessors ---------- */
 function game(){ return DB.games.find(g=>g.id===DB.activeGameId) || null; }
 function newGame(o){
+  // a game opens with a free kick from the kicking team's own 40 (NFHS)
+  const kicking = o.kickoff==='them' ? 'them' : 'us';
   const g = { id:'g'+uid(), date:o.date||todayStr(), opponent:o.opponent||'Opponent',
-    homeAway:o.homeAway||'home', place:o.place||'', plays:[],
-    sit:{q:1, poss:'us', down:1, dist:10, spot:25},
+    homeAway:o.homeAway||'home', place:o.place||'', plays:[], kickoff:kicking,
+    sit:{q:1, poss:kicking, down:1, dist:10, spot: kicking==='us' ? 40 : 60},
     createdAt:nowISO(), updatedAt:nowISO(), origin:DB.deviceId };
   DB.games.unshift(g); DB.activeGameId=g.id; save(); return g;
 }
@@ -791,8 +822,55 @@ function renderTop(){
   $('#sitLine').textContent = sitText(s)+' · '+spotLabel(s.spot);
   $('#sitSub').textContent = (s.poss==='us'? usName()+' ball' : themName()+' ball')+' · '+qLabel(s.q);
   $('#btnQtr').textContent = qLabel(s.q);
+  renderFieldStrip();
 }
 function qLabel(q){ return q<=4 ? 'Q'+q : (q===5?'OT':'OT'+(q-4)); }
+
+/* =========================================================================
+   FIELD STRIP — a glanceable picture of where the ball is, and (on kicks)
+   somewhere to tap. 120 units wide: two 10-yard end zones plus the field.
+   ========================================================================= */
+function fieldPct(spot){ return (10 + clamp(spot,0,100)) / 120 * 100; }
+function spotFromPct(pct){ return clamp(Math.round(pct/100*120 - 10), 0, 100); }
+function firstDownSpot(s){
+  if(!s || s.down==null) return null;
+  const fd = s.poss==='us' ? s.spot + s.dist : s.spot - s.dist;
+  return (fd<=0 || fd>=100) ? null : fd;         // goal to go — no marker to draw
+}
+function fieldHTML(o){
+  const cls = ['gridiron']; if(o.pick) cls.push('tap');
+  let h = `<div class="${cls.join(' ')}"${o.pick?` data-fieldpick="${esc(o.pick)}"`:''}>`;
+  h += `<div class="fz l"><span>${esc(usShort().slice(0,3))}</span></div>`;
+  h += `<div class="fz r"><span>${esc(themShort().slice(0,3))}</span></div>`;
+  for(let y=10; y<=90; y+=10){
+    const at = fieldPct(y).toFixed(3);
+    h += `<i class="fl${y===50?' mid':''}" style="left:${at}%"></i>`;
+    // numbered like a real field — counts down to whichever goal line is nearer.
+    // Only 20 / 50 / 20 survive on a narrow phone; the rest drop out via CSS.
+    const key = (y===20 || y===50 || y===80) ? ' key' : '';
+    h += `<b class="fn${key}" style="left:${at}%">${y<=50 ? y : 100-y}</b>`;
+  }
+  if(o.los!=null)  h += `<i class="flos" style="left:${fieldPct(o.los).toFixed(3)}%"></i>`;
+  if(o.fd!=null)   h += `<i class="ffd" style="left:${fieldPct(o.fd).toFixed(3)}%"></i>`;
+  if(o.spot!=null){
+    const yl = Math.round(o.spot<=50 ? o.spot : 100-o.spot);   // the number painted on that yard line
+    h += `<i class="fball ${o.poss==='them'?'l':'r'}" style="left:${fieldPct(o.spot).toFixed(3)}%">${yl}</i>`;
+  }
+  h += '</div>';
+  return h;
+}
+function renderFieldStrip(){
+  const box = $('#fieldStrip'); if(!box) return;
+  const g = game();
+  if(!g){ box.innerHTML=''; return; }
+  const s = g.sit;
+  // the dotted line marks the line of scrimmage; the ball sits on it
+  box.innerHTML = fieldHTML({ spot:s.spot, los:s.spot, fd:firstDownSpot(s), poss:s.poss }) +
+    `<div class="fieldkey"><span><b style="color:#1d4ed8">&#9679;</b> ball on ${esc(spotLabel(s.spot))}</span>
+     <span><b>&#8942;</b> line of scrimmage</span>
+     <span><b style="color:#a16207">&#9474;</b> line to gain</span>
+     <span>${esc(s.poss==='us'?usName():themName())} driving ${s.poss==='us'?'&rarr;':'&larr;'}</span></div>`;
+}
 
 /* ---------- roster chip helpers ---------- */
 function chipsHTML(role, sel, opts){
@@ -908,8 +986,9 @@ function spotPickerHTML(field, val, label){
   const v = clamp(val==null?50:val, 0, 100);
   const side = v<=50 ? 'own' : 'opp';
   const yl = v<=50 ? v : 100-v;
-  let h=`<h3 style="margin-top:10px">${esc(label)}</h3>
-    <div class="row tight" style="margin-bottom:6px">
+  let h=`<h3 style="margin-top:10px">${esc(label)}</h3>`;
+  h += fieldHTML({ spot:v, los:(E&&E.p)?E.p.spot:null, poss:(E&&E.p)?E.p.poss:'us', pick:field });
+  h += `<div class="row tight" style="margin-bottom:6px">
       <div class="seg" style="flex:none">
         <button data-side="${field}|own" class="${side==='own'?'on':''}">${esc(usShort())}</button>
         <button data-side="${field}|opp" class="${side==='opp'?'on':''}">${esc(themShort())}</button>
@@ -1271,11 +1350,9 @@ function commitPlay(){
 function nextSit(sit, p){
   let s = {q:p.q||sit.q, poss:p.poss, down:sit.down, dist:sit.dist, spot:sit.spot};
   const opp = p.poss==='us' ? 'them':'us';
-  const recvTouchbackSpot = (kickingTeam, isPunt)=>{
-    // spot measured from OUR goal line
-    if(kickingTeam==='us') return isPunt?80:75;   // they start at their own 20 / 25
-    return isPunt?20:25;                          // we start at our own 20 / 25
-  };
+  // NFHS: every touchback comes out to the 20 — kickoff or punt alike.
+  // (NCAA puts kickoff touchbacks on the 25; high school does not.)
+  const recvTouchbackSpot = kickingTeam => kickingTeam==='us' ? 80 : 20;
   if(p.type==='penalty'){
     // the penalised team always loses ground; work in "yards gained by the offense"
     const onOffense = (p.penOn === p.poss);
@@ -1299,7 +1376,7 @@ function nextSit(sit, p){
   if(p.type==='punt'){
     let landing = p.poss==='us' ? clamp(sit.spot+(p.yds||0),0,100) : clamp(sit.spot-(p.yds||0),0,100);
     let sp;
-    if(p.touchback) sp = recvTouchbackSpot(p.poss, true);
+    if(p.touchback) sp = recvTouchbackSpot(p.poss);
     else sp = p.poss==='us' ? clamp(landing-(p.retYds||0),1,99) : clamp(landing+(p.retYds||0),1,99);
     if(p.retTd){ const sc=p.scoreBy||opp; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
     s = flipPoss({q:s.q,poss:p.poss,spot:sp}, sp);
@@ -1309,7 +1386,7 @@ function nextSit(sit, p){
   if(p.type==='kickoff'){
     let landing = p.poss==='us' ? clamp(sit.spot+(p.yds||0),0,100) : clamp(sit.spot-(p.yds||0),0,100);
     let sp;
-    if(p.touchback) sp = recvTouchbackSpot(p.poss, false);
+    if(p.touchback) sp = recvTouchbackSpot(p.poss);
     else sp = p.poss==='us' ? clamp(landing-(p.retYds||0),1,99) : clamp(landing+(p.retYds||0),1,99);
     if(p.retTd){ const sc=p.scoreBy||opp; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
     s = flipPoss({q:s.q,poss:p.poss,spot:sp}, sp);
@@ -1644,11 +1721,20 @@ function gameForm(gid){
           <select id="gH"><option value="home" ${g&&g.homeAway==='away'?'':'selected'}>Home</option><option value="away" ${g&&g.homeAway==='away'?'selected':''}>Away</option></select></div>
         <div class="field"><label class="f">Place</label><input type="text" id="gP" value="${esc(g?g.place:'')}" placeholder="Memorial Field"></div>
       </div>
+      ${g?'':`<div class="field"><label class="f">Opening kickoff</label>
+        <div class="seg p" id="gK">
+          <button data-v="us" class="on">${esc(usName())} kicks</button>
+          <button data-v="them">Opponent kicks</button>
+        </div>
+        <p class="tiny muted" style="margin:4px 0 0">Sets the ball on the kicking team's own 40 to start.</p></div>`}
       <button class="btn p wide" id="gSave">${g?'Save':'Start game'}</button>
     </div>`, body=>{
+      let kickoff='us';
+      $$('#gK button',body).forEach(b=> b.onclick=()=>{ kickoff=b.dataset.v;
+        $$('#gK button',body).forEach(x=>x.classList.toggle('on', x===b)); });
       $('#gSave',body).onclick=()=>{
         const o={date:$('#gD',body).value||todayStr(), opponent:$('#gO',body).value.trim()||'Opponent',
-                 homeAway:$('#gH',body).value, place:$('#gP',body).value.trim()};
+                 homeAway:$('#gH',body).value, place:$('#gP',body).value.trim(), kickoff:kickoff};
         if(g){ Object.assign(g,o); }
         else newGame(o);
         save(); closeModal(); switchView('game'); toast(g?'Game updated':'Game started — kick it off');
@@ -1828,6 +1914,11 @@ function onEntryClick(e){
   const dt=t.closest('[data-deltag]'); if(dt){ p.def.splice(parseInt(dt.dataset.deltag,10),1); return renderEntry(); }
   const ty=t.closest('[data-tagy]'); if(ty){ const [i,d]=ty.dataset.tagy.split(',').map(Number);
     p.def[i].y=Math.max(0,(p.def[i].y||0)+d); return renderEntry(); }
+  const fp=t.closest('[data-fieldpick]'); if(fp){
+    const r=fp.getBoundingClientRect();
+    const x=(e.clientX!=null? e.clientX : r.left+r.width/2) - r.left;
+    p[fp.dataset.fieldpick] = spotFromPct(clamp(x/r.width*100, 0, 100));
+    return renderEntry(); }
   const sd=t.closest('[data-side]'); if(sd){
     const bits=sd.dataset.side.split('|'), f=bits[0], side=bits[1];
     const v = p[f]==null?50:p[f], yl = v<=50 ? v : 100-v;
