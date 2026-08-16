@@ -38,7 +38,7 @@ h3{font-size:.95rem; text-transform:uppercase; letter-spacing:.06em; color:var(-
 .scorebar{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .sb-team{display:flex; align-items:baseline; gap:8px; padding:2px 10px; border-radius:9px; background:#ffffff14}
 .sb-team.has{background:#1d4ed8}
-.sb-name{font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; opacity:.85; max-width:11ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sb-name{font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; opacity:.85; max-width:12ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .sb-pts{font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums}
 .sb-mid{flex:1; text-align:center; min-width:150px}
 .sit{font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums}
@@ -96,8 +96,29 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
   min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; cursor:pointer}
 .chip b{font-size:1.15rem; font-variant-numeric:tabular-nums; line-height:1}
 .chip span{font-size:.66rem; color:var(--muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.chip .cnum{display:flex; align-items:center; justify-content:center; gap:4px; max-width:100%}
+.chip .cpos{font-style:normal; font-size:.6rem; font-weight:800; letter-spacing:.03em; line-height:1;
+  color:#fff; background:#94a3b8; border-radius:4px; padding:2px 4px; flex:none}
 .chip.on{border-color:var(--accent); background:#eff6ff; box-shadow:inset 0 0 0 1.5px var(--accent)}
 .chip.on span{color:var(--accent)}
+.chip.on .cpos{background:var(--accent); color:#fff}
+.chip.prime{border-color:#94a3b8; background:#fbfdff}
+.chip.prime .cpos{background:var(--ink)}
+.chip.prime.on{border-color:var(--accent); background:#eff6ff}
+.flag.ghost{border-style:dashed; color:var(--muted); font-weight:600}
+.penlist{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:6px}
+.pen{display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left;
+  border:1.5px solid var(--line); background:var(--paper); border-radius:10px; min-height:44px;
+  padding:8px 10px; font-size:.84rem; font-weight:650; cursor:pointer}
+.pen i{font-style:normal; font-size:.68rem; font-weight:800; color:#fff; background:#94a3b8;
+  border-radius:5px; padding:2px 6px; flex:none}
+.pen.on{border-color:var(--accent); background:#eff6ff; color:var(--accent)}
+.pen.on i{background:var(--accent)}
+.legend{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:3px 12px;
+  background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:9px 11px; margin:0 0 8px}
+.legend div{display:flex; gap:7px; align-items:baseline; font-size:.75rem}
+.legend b{flex:none; min-width:3.2ch; font-weight:800}
+.legend span{color:var(--muted)}
 
 .flags{display:flex; flex-wrap:wrap; gap:6px}
 .flag{border:1.5px solid var(--line); background:var(--paper); border-radius:20px; padding:8px 13px; font-size:.83rem; font-weight:700; min-height:40px}
@@ -113,6 +134,10 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
 .pad{display:grid; grid-template-columns:repeat(5,1fr); gap:6px}
 .pad button{min-height:46px; border-radius:10px; border:1.5px solid var(--line); background:var(--paper); font-weight:700; font-size:.95rem}
 .pad button.alt{background:#f8fafc; color:var(--muted); font-size:.8rem}
+.pad button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.spotval{border:1.5px dashed #94a3b8; background:#e8edf3; border-radius:20px; min-width:9.5ch;
+  min-height:38px; padding:6px 12px; font-weight:800; font-size:.9rem; letter-spacing:.01em; cursor:pointer}
+.spotval:active{background:#dbe2ea}
 
 /* ---------- inputs ---------- */
 label.f{display:block; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin-bottom:3px}
@@ -376,6 +401,12 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
         <button class="btn sm ghost" id="btnHelp">How to use</button>
       </div>
       <p class="tiny muted" style="margin-top:8px">Everything lives on this device. Back up after each game — clearing your browser data will erase it.</p>
+      <hr>
+      <div class="spread">
+        <div><b class="small">App version</b> <span class="pill" id="appVer">—</span>
+          <div class="tiny muted">Every device should show the same version.</div></div>
+        <button class="btn sm ghost" id="btnUpdate">Check for update</button>
+      </div>
     </div>
   </section>
 </main>
@@ -393,6 +424,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
+const APP_VERSION = '2026.08.16-9';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -400,6 +432,23 @@ const STAT_CODES = [
   ['HUR','Hurried QB'],['BK','Blocked kick'],['BPT','Blocked punt'],['SAF','Safety']
 ];
 const NEEDS_YDS = {SK:1, INT:1, FR:1};
+/* the eight you use all night; the rest live behind "More" */
+const CORE_CODES = ['T','A','TFL','SK','INT','PD','FC','FR'];
+
+/* [name, yards, automatic first down when it's on the defence]
+   NFHS yardages — the ones you actually hear on a Friday night. */
+const PENALTIES = [
+  ['False start', 5, 0],            ['Offside', 5, 0],
+  ['Delay of game', 5, 0],          ['Encroachment', 5, 0],
+  ['Illegal formation', 5, 0],      ['Illegal motion / shift', 5, 0],
+  ['Illegal substitution', 5, 0],   ['Illegal procedure', 5, 0],
+  ['Holding', 10, 0],               ['Illegal block in the back', 10, 0],
+  ['Illegal use of hands', 10, 0],  ['Intentional grounding', 10, 0],
+  ['Pass interference', 15, 1],     ['Facemask', 15, 1],
+  ['Personal foul', 15, 1],         ['Roughing the passer', 15, 1],
+  ['Roughing the kicker', 15, 1],   ['Unsportsmanlike conduct', 15, 1],
+  ['Targeting', 15, 1],             ['Clipping', 15, 0]
+];
 
 /* ---------- tiny helpers ---------- */
 const $  = (s,r)=> (r||document).querySelector(s);
@@ -453,6 +502,21 @@ function newGame(o){
 }
 function usName(){ return (DB.team.name||'').trim() || 'US'; }
 function themName(){ const g=game(); return g ? (g.opponent||'OPP') : 'OPP'; }
+/* Short, upper-case forms for tight spots — yard lines, toggles, play log.
+   "Central Catholic Cougars" becomes CENTRAL rather than wrapping a line. */
+function shortName(s, max){
+  max = max || 10;
+  s = String(s||'').trim();
+  if(!s) return '';
+  let t = s.toUpperCase();
+  if(t.length > max){
+    const first = t.split(/\s+/)[0];
+    t = first.length <= max ? first : first.slice(0, max);
+  }
+  return t;
+}
+function usShort(){ return shortName(DB.team.name) || 'US'; }
+function themShort(){ const g=game(); return shortName(g && g.opponent) || 'OPP'; }
 function player(num){ return DB.roster.find(p=>String(p.num)===String(num)) || null; }
 function pname(num){ const p=player(num); return p? p.name : ''; }
 function pLabel(num){ const p=player(num); return p ? '#'+p.num+' '+p.name : '#'+num; }
@@ -462,9 +526,9 @@ function sortRoster(){ DB.roster.sort((a,b)=> (parseInt(a.num,10)||999)-(parseIn
 /* spot = yards from OUR goal line, 0..100. We advance toward 100. */
 function spotLabel(spot){
   spot = Math.round(spot);
-  if(spot===50) return '50';
-  if(spot<50) return 'OWN '+spot;
-  return 'OPP '+(100-spot);
+  if(spot===50) return 'MIDFIELD';
+  if(spot<50) return usShort()+' '+spot;
+  return themShort()+' '+(100-spot);
 }
 function sitText(s){
   if(!s) return '';
@@ -542,7 +606,7 @@ function computeStats(g){
     /* ---- team-level ---- */
     if(p.type!=='penalty' && p.type!=='note') T.plays++;
     if(p.fd){ if(ours) T.firstDowns++; else T.oppFirstDowns++; }
-    if(p.penYds){
+    if(p.penYds && !p.declined){
       const on = p.penOn || (ours?'us':'them');
       if(on==='us'){ T.penYds+=p.penYds; T.penCount++; } else { T.oppPenYds+=p.penYds; }
     }
@@ -695,7 +759,7 @@ function totalRow(list, keys){
    UI STATE + PLAY ENTRY
    ========================================================================= */
 const UI = { view:'game', statSide:'off', seasonSide:'off', playFilter:'all',
-             defStat:'T', recent:{}, editingId:null };
+             defStat:'T', recent:{}, editingId:null, showAll:{}, defMore:false, defLegend:false };
 let E = null;   // current entry draft
 
 const QUICK_YDS = [-10,-5,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,35,40,50,60];
@@ -710,8 +774,8 @@ function remember(role,num){
 /* ---------- top bar ---------- */
 function renderTop(){
   const g=game();
-  $('#sbUsName').textContent = usName();
-  $('#sbThemName').textContent = g? themName() : 'OPP';
+  $('#sbUsName').textContent = usShort();
+  $('#sbThemName').textContent = g ? themShort() : 'OPP';
   if(!g){ $('#sitLine').textContent='No game started'; $('#sitSub').textContent='Go to Setup to begin';
     $('#sbUsPts').textContent='0'; $('#sbThemPts').textContent='0'; return; }
   const st=computeStats(g);
@@ -720,6 +784,10 @@ function renderTop(){
   const s=g.sit;
   $('#sbUs').classList.toggle('has', s.poss==='us');
   $('#sbThem').classList.toggle('has', s.poss==='them');
+  $$('#possSeg button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.poss===s.poss);
+    b.textContent = (b.dataset.poss==='us' ? usName() : themName()) + ' ball';
+  });
   $('#sitLine').textContent = sitText(s)+' · '+spotLabel(s.spot);
   $('#sitSub').textContent = (s.poss==='us'? usName()+' ball' : themName()+' ball')+' · '+qLabel(s.q);
   $('#btnQtr').textContent = qLabel(s.q);
@@ -730,37 +798,95 @@ function qLabel(q){ return q<=4 ? 'Q'+q : (q===5?'OT':'OT'+(q-4)); }
 function chipsHTML(role, sel, opts){
   opts=opts||{};
   if(!DB.roster.length) return '<p class="small muted">No players yet — add your roster in Setup.</p>';
-  const rec = UI.recent[role]||[];
+  const showingAll = !!(UI.showAll && UI.showAll[role]);
+  const rec = (UI.recent[role]||[]).map(player).filter(p=> p && (showingAll || fitsRole(p,role)));
   let h='';
   if(rec.length && !opts.noRecent){
     h+='<div class="tiny muted" style="margin:2px 0 4px">Recent</div><div class="chips" style="margin-bottom:8px">';
-    rec.forEach(n=>{ const p=player(n); if(!p) return;
-      h+=`<button class="chip ${String(sel)===String(n)?'on':''}" data-pick="${esc(role)}" data-num="${esc(n)}"><b>${esc(p.num)}</b><span>${esc(p.name)}</span></button>`; });
+    rec.forEach(p=>{
+      h+=`<button class="chip ${String(sel)===String(p.num)?'on':''} ${isPrime(p,role)?'prime':''}" data-pick="${esc(role)}" data-num="${esc(p.num)}">${chipInner(p,role)}</button>`; });
     h+='</div>';
   }
+  const list = orderedRoster(role);
   h+='<div class="chips">';
-  orderedRoster(role).forEach(p=>{
-    h+=`<button class="chip ${String(sel)===String(p.num)?'on':''}" data-pick="${esc(role)}" data-num="${esc(p.num)}"><b>${esc(p.num)}</b><span>${esc(p.name||p.pos||'')}</span></button>`;
+  list.forEach(p=>{
+    const cls = ['chip'];
+    if(String(sel)===String(p.num)) cls.push('on');
+    if(isPrime(p,role)) cls.push('prime');
+    h+=`<button class="${cls.join(' ')}" data-pick="${esc(role)}" data-num="${esc(p.num)}">${chipInner(p,role)}</button>`;
   });
   h+='</div>';
+  const hidden = DB.roster.length - list.length;
+  if(ROLE_POS[role] && (hidden>0 || (UI.showAll&&UI.showAll[role]))){
+    const showing = UI.showAll && UI.showAll[role];
+    h+=`<div class="row tight" style="margin-top:6px">
+        <span class="tiny muted">${showing?'Showing the whole roster':
+          `Showing ${esc(ROLE_LABEL[role]||'likely players')} · ${hidden} hidden`}</span>
+        <span class="grow"></span>
+        <button class="btn xs ghost" data-showall="${esc(role)}">${showing?'Just the likely ones':'Show everyone'}</button>
+      </div>`;
+  }
   return h;
 }
-/* likely players for the job float to the front — nobody is hidden */
+/* the position shown is the one that matters for this job — a WR/DB reads
+   "WR" when you're picking a receiver and "DB" when you're tagging a tackle */
+function rolePos(p, role){
+  const pos=(p.pos||'').toUpperCase();
+  if(!pos) return '';
+  const parts=pos.split('/').map(s=>s.trim()).filter(Boolean);
+  const want=ROLE_POS[role];
+  if(want){ const hit=parts.find(x=>want.indexOf(x)>=0); if(hit) return hit; }
+  return parts[0]||'';
+}
+function chipInner(p, role){
+  const pos=rolePos(p,role);
+  return `<span class="cnum"><b>${esc(p.num)}</b>${pos?`<i class="cpos">${esc(pos)}</i>`:''}</span>`+
+         `<span>${esc(p.name||'')}</span>`;
+}
+/* Who can appear for each job. Anyone whose position doesn't fit is hidden
+   until you tap "Show everyone" — but a player with no position listed is
+   never hidden, and if a filter would empty the list we show everybody. */
 const ROLE_POS = {
-  rusher:['RB','FB','HB','TB','QB','WR','ATH'], passer:['QB','ATH','WR'],
-  receiver:['WR','TE','RB','FB','ATH'], returner:['WR','RB','DB','CB','S','ATH'],
-  kicker:['K','P','PK'], punter:['P','K','PK'],
-  def:['DL','DE','DT','NG','LB','ILB','OLB','DB','CB','S','FS','SS','NT']
+  rusher:  ['RB','FB','HB','TB','QB','WR','SLOT','WB','ATH','UTIL'],
+  passer:  ['QB','ATH','WR','RB','HB','TB','UTIL'],
+  receiver:['WR','TE','RB','FB','HB','TB','SE','FL','SLOT','WB','ATH','UTIL'],
+  returner:['WR','RB','HB','TB','DB','CB','S','FS','SS','KR','PR','ATH','SLOT','UTIL'],
+  kicker:  ['K','PK','P'],
+  punter:  ['P','K','PK'],
+  def:     ['DL','DE','DT','NT','NG','EDGE','LB','ILB','OLB','MLB','WLB','SLB',
+            'DB','CB','S','FS','SS','SAF','NB','ATH','UTIL']
 };
+/* the ones who do this job nearly every time — shown first and outlined */
+const ROLE_PRIME = {
+  rusher:['RB','FB','HB','TB'], passer:['QB'], receiver:['WR','TE'],
+  returner:['KR','PR','WR','RB'], kicker:['K','PK'], punter:['P'], def:null
+};
+const ROLE_LABEL = {
+  rusher:'ball carriers', passer:'passers', receiver:'receivers',
+  returner:'returners', kicker:'kickers', punter:'punters', def:'defenders'
+};
+function posParts(p){
+  return (p.pos||'').toUpperCase().split('/').map(s=>s.trim()).filter(Boolean);
+}
+function fitsRole(p, role){
+  const want=ROLE_POS[role]; if(!want) return true;
+  const parts=posParts(p);
+  if(!parts.length) return true;                 // unclassified — never hide
+  return parts.some(x=>want.indexOf(x)>=0);
+}
+function isPrime(p, role){
+  const prime=ROLE_PRIME[role]; if(!prime) return false;
+  return posParts(p).some(x=>prime.indexOf(x)>=0);
+}
 function orderedRoster(role){
-  const want = ROLE_POS[role];
-  if(!want) return DB.roster.slice();
-  const rank = p=>{
-    const pos=(p.pos||'').toUpperCase();
-    if(!pos) return 1;
-    return pos.split('/').some(x=>want.includes(x.trim())) ? 2 : 0;
-  };
-  return DB.roster.slice().sort((a,b)=> rank(b)-rank(a) || (parseInt(a.num,10)||999)-(parseInt(b.num,10)||999));
+  const showAll = UI.showAll && UI.showAll[role];
+  let list = DB.roster.slice();
+  if(ROLE_POS[role] && !showAll){
+    const kept = list.filter(p=>fitsRole(p,role));
+    if(kept.length) list = kept;                 // never leave them with nothing
+  }
+  const rank = p => isPrime(p,role) ? 2 : (fitsRole(p,role) ? 1 : 0);
+  return list.sort((a,b)=> rank(b)-rank(a) || (parseInt(a.num,10)||999)-(parseInt(b.num,10)||999));
 }
 function padHTML(val, field){
   field = field||'yds';
@@ -774,6 +900,40 @@ function padHTML(val, field){
   h+=`<button class="alt" data-custom="${field}">Other…</button></div>`;
   return h;
 }
+/* ---------- yard-line picker ----------
+   Stat keepers see yard lines, not distances. Pick where the ball was caught
+   and where it ended up; the app does the subtraction. Tap the read-out to
+   type an exact yard line instead of stepping to it. */
+function spotPickerHTML(field, val, label){
+  const v = clamp(val==null?50:val, 0, 100);
+  const side = v<=50 ? 'own' : 'opp';
+  const yl = v<=50 ? v : 100-v;
+  let h=`<h3 style="margin-top:10px">${esc(label)}</h3>
+    <div class="row tight" style="margin-bottom:6px">
+      <div class="seg" style="flex:none">
+        <button data-side="${field}|own" class="${side==='own'?'on':''}">${esc(usShort())}</button>
+        <button data-side="${field}|opp" class="${side==='opp'?'on':''}">${esc(themShort())}</button>
+      </div>
+      <span class="grow"></span>
+      <div class="row tight" style="flex:none">
+        <button class="btn sm" data-spotstep="${field}|-1">&minus;</button>
+        <button class="spotval" data-spotedit="${field}|${esc(label)}">${esc(spotLabel(v))}</button>
+        <button class="btn sm" data-spotstep="${field}|1">+</button>
+      </div>
+    </div>
+    <div class="pad">`;
+  [5,10,15,20,25,30,35,40,45,50].forEach(n=>{
+    h+=`<button data-spotset="${field}|${n}" class="${yl===n?'on':''}">${n}</button>`; });
+  h+='</div>';
+  return h;
+}
+/* distances derived from the two yard lines */
+function kickMath(p){
+  const dir = p.poss==='us' ? 1 : -1;
+  const land = p.landSpot==null ? p.spot : p.landSpot;
+  const end  = p.endSpot==null  ? land   : p.endSpot;
+  return { yds: Math.round(dir*(land - p.spot)), retYds: Math.round(dir*(land - end)), land:land, end:end };
+}
 function flagHTML(list){
   return '<div class="flags">'+list.map(f=>
     `<button class="flag ${f.on?'on':''} ${f.kind||''}" data-flag="${f.k}">${esc(f.label)}</button>`).join('')+'</div>';
@@ -781,9 +941,19 @@ function flagHTML(list){
 function defPanelHTML(){
   const tags = (E.p.def||[]);
   let h='<hr><h3>Defense</h3>';
-  h+='<div class="flags" style="margin-bottom:8px">'+STAT_CODES.map(c=>
-      `<button class="flag ${UI.defStat===c[0]?'on':''}" data-defstat="${c[0]}" title="${esc(c[1])}">${c[0]}</button>`).join('')+'</div>';
-  h+=`<p class="tiny muted" style="margin:-2px 0 6px">Pick a stat above, then tap the jersey numbers who get it. Tap again to add another.</p>`;
+  const codes = STAT_CODES.filter(c=> UI.defMore || CORE_CODES.indexOf(c[0])>=0 || UI.defStat===c[0]);
+  h+='<div class="flags" style="margin-bottom:6px">'+codes.map(c=>
+      `<button class="flag ${UI.defStat===c[0]?'on':''}" data-defstat="${c[0]}" title="${esc(c[1])}">${c[0]}</button>`).join('')+
+      `<button class="flag ghost" data-defmore="1">${UI.defMore?'Fewer':'More…'}</button>`+
+      `<button class="flag ghost" data-deflegend="1" aria-label="What do these mean?">${UI.defLegend?'Hide key':'?'}</button></div>`;
+  // the selected code always spells itself out — costs no height, teaches as you go
+  const sel = STAT_CODES.find(c=>c[0]===UI.defStat);
+  h+=`<p class="tiny" style="margin:-2px 0 6px"><b>${esc(UI.defStat)}</b>
+      <span class="muted">— ${esc(sel?sel[1]:'')} · now tap the jersey numbers who get it</span></p>`;
+  if(UI.defLegend){
+    h+='<div class="legend">'+STAT_CODES.map(c=>
+        `<div><b>${esc(c[0])}</b><span>${esc(c[1])}</span></div>`).join('')+'</div>';
+  }
   h+= chipsHTML('def', null, {noRecent:false});
   if(tags.length){
     h+='<div class="flags" style="margin-top:8px">'+tags.map((t,i)=>{
@@ -803,12 +973,22 @@ function startEntry(type){
         q:s.q, poss:s.poss, down:s.down, dist:s.dist, spot:s.spot, type:type,
         yds:0, def:[] } };
   if(type==='pass'){ E.p.result='comp'; E.p.passer = (UI.recent.passer||[])[0]||null; }
-  if(type==='punt') E.p.punter = (UI.recent.punter||[])[0]||null;
-  if(type==='kickoff') E.p.kicker = (UI.recent.kicker||[])[0]||null;
+  if(type==='punt'){ E.p.punter = (UI.recent.punter||[])[0]||null; initKickSpots(E.p, 40); }
+  if(type==='kickoff'){ E.p.kicker = (UI.recent.kicker||[])[0]||null; initKickSpots(E.p, 55); }
   if(type==='fg'){ E.p.kicker=(UI.recent.kicker||[])[0]||null; E.p.fgDist = fgSuggest(s); E.p.fgGood=true; }
+  if(type==='penalty'){ E.p.penOn='us'; E.p.penYds=0; }
   renderEntry();
 }
 function fgSuggest(s){ return Math.max(17, Math.round((100-s.spot)+17)); }
+/* automatic-first-down fouls only carry the first down when the defence commits them */
+function applyPenAuto(p){ p.autoFd = !!p.penAuto && (p.penOn||'us') !== p.poss; }
+/* start the yard-line pickers on a typical kick so most plays are one tap away */
+function initKickSpots(p, typical){
+  const dir = p.poss==='us' ? 1 : -1;
+  const land = clamp(p.spot + dir*typical, 1, 99);
+  if(p.landSpot==null) p.landSpot = land;
+  if(p.endSpot==null)  p.endSpot  = land;
+}
 function cancelEntry(){ E=null; UI.editingId=null; renderEntry(); }
 
 function renderEntry(){
@@ -824,7 +1004,7 @@ function renderEntry(){
 function menuHTML(g){
   const ours = g.sit.poss==='us';
   const b=(t,l,s)=>`<button class="btn ${s||''}" data-start="${t}">${l}${s===undefined?'':''}</button>`;
-  let h=`<div class="spread" style="margin-bottom:8px"><h2 style="margin:0">${ours?'Our play':themName()+"'s play"}</h2>
+  let h=`<div class="spread" style="margin-bottom:8px"><h2 style="margin:0">${esc(ours?usName():themName())} play</h2>
      <span class="pill">${sitText(g.sit)} · ${spotLabel(g.sit.spot)}</span></div>`;
   h+='<div class="bigrow">';
   h+=`<button class="btn dark" data-start="run">RUN</button>`;
@@ -878,54 +1058,42 @@ function formHTML(g){
     if(p.result==='sack'){ h+='<hr><h3>Yards lost</h3>'+padHTML(p.yds,'yds')+'<p class="tiny muted">Enter as a negative number.</p>'; }
     if(p.result==='int'){ h+='<hr><h3>Return yards</h3>'+padHTML(p.retYds||0,'retYds'); }
     h+=prev;
-    const fl=[{k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},{k:'fd', label:'1st down', on:p.fd}];
+    // an incomplete pass can't be a score or a first down — don't offer it
+    const fl=[];
+    if(p.result==='comp') fl.push({k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},{k:'fd', label:'1st down', on:p.fd});
     if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'});
     if(p.result==='int') fl.push({k:'retTd', label:'Returned for TD', on:p.retTd, kind:'danger'});
     h+=flagHTML(fl);
     if(!ours) h+=defPanelHTML();
   }
-  else if(E.type==='punt'){
-    if(ours){
-      h+='<h3>Punter</h3>'+chipsHTML('punter', p.punter);
-      h+='<hr><h3>Punt distance</h3>'+padHTML(p.yds,'yds');
-      h+=flagHTML([{k:'inside20',label:'Inside 20',on:p.inside20,kind:'good'},
-                   {k:'touchback',label:'Touchback',on:p.touchback},
-                   {k:'blocked',label:'Blocked',on:p.blocked,kind:'danger'}]);
-      h+='<hr><h3>Their return</h3>'+padHTML(p.retYds||0,'retYds');
-      h+=defPanelHTML();
-    } else {
-      h+='<h3>Punt distance</h3>'+padHTML(p.yds,'yds');
-      h+='<hr><h3>Our returner</h3>'+chipsHTML('returner', p.returner);
+  else if(E.type==='punt' || E.type==='kickoff'){
+    const isPunt = E.type==='punt';
+    const kicker = isPunt ? 'punter' : 'kicker';
+    if(ours) h+=`<h3>${isPunt?'Punter':'Kicker'}</h3>`+chipsHTML(kicker, p[kicker]);
+    else h+=`<h3>${esc(usName())} returner</h3>`+chipsHTML('returner', p.returner);
+    h+='<hr>';
+    if(p.manualYds){
+      h+=`<h3>${isPunt?'Punt':'Kick'} distance</h3>`+padHTML(p.yds,'yds');
       h+='<h3 style="margin-top:10px">Return yards</h3>'+padHTML(p.retYds||0,'retYds');
-      h+=flagHTML([{k:'fairCatch',label:'Fair catch',on:p.fairCatch},
-                   {k:'touchback',label:'Touchback',on:p.touchback},
-                   {k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
-                   {k:'blocked',label:'We blocked it',on:p.blocked,kind:'good'},
-                   {k:'fum',label:'Muffed/fumble',on:p.fum},
-                   {k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'}]);
-    }
-    h+=prev;
-  }
-  else if(E.type==='kickoff'){
-    if(ours){
-      h+='<h3>Kicker</h3>'+chipsHTML('kicker', p.kicker);
-      h+='<hr><h3>Kick distance</h3>'+padHTML(p.yds,'yds');
-      h+=flagHTML([{k:'touchback',label:'Touchback',on:p.touchback,kind:'good'},
-                   {k:'onside',label:'Onside',on:p.onside},
-                   {k:'recovered',label:'We recovered',on:p.recovered,kind:'good'}]);
-      h+='<hr><h3>Their return</h3>'+padHTML(p.retYds||0,'retYds');
-      h+=defPanelHTML();
     } else {
-      h+='<h3>Kick distance</h3>'+padHTML(p.yds,'yds');
-      h+='<hr><h3>Our returner</h3>'+chipsHTML('returner', p.returner);
-      h+='<h3 style="margin-top:10px">Return yards</h3>'+padHTML(p.retYds||0,'retYds');
-      h+=flagHTML([{k:'touchback',label:'Touchback',on:p.touchback},
-                   {k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
-                   {k:'onside',label:'Onside',on:p.onside},
-                   {k:'fum',label:'Muffed/fumble',on:p.fum},
-                   {k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'}]);
+      h+=spotPickerHTML('landSpot', p.landSpot, `${ours?themName():usName()} catch it at`);
+      h+=spotPickerHTML('endSpot',  p.endSpot,  'Whistle blows at');
     }
+    h+=`<div class="row" style="margin-top:6px"><button class="btn xs ghost" data-act="togglemode">
+        ${p.manualYds?'Pick yard lines instead':'Enter distances instead'}</button></div>`;
+    const fl = [{k:'touchback',label:'Touchback',on:p.touchback}];
+    if(isPunt && ours) fl.push({k:'blocked',label:'Blocked',on:p.blocked,kind:'danger'});
+    if(isPunt && !ours) fl.push({k:'fairCatch',label:'Fair catch',on:p.fairCatch},
+                                {k:'blocked',label:usName()+' blocked it',on:p.blocked,kind:'good'});
+    if(!isPunt) fl.push({k:'onside',label:'Onside',on:p.onside},
+                        {k:'recovered',label:(ours?usName():themName())+' recovered',on:p.recovered});
+    if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
+                      {k:'fum',label:'Muffed/fumble',on:p.fum},
+                      {k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'});
+    else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'});
+    h+=flagHTML(fl);
     h+=prev;
+    if(ours) h+=defPanelHTML();
   }
   else if(E.type==='fg'){
     if(ours) h+='<h3>Kicker</h3>'+chipsHTML('kicker', p.kicker);
@@ -966,15 +1134,21 @@ function formHTML(g){
     if(!ours) h+=defPanelHTML();
   }
   else if(E.type==='penalty'){
-    h+=`<div class="seg" style="margin-bottom:10px">
-        <button data-pen="us" class="${(p.penOn||'us')==='us'?'on':''}">On ${esc(usName())}</button>
-        <button data-pen="them" class="${p.penOn==='them'?'on':''}">On ${esc(themName())}</button></div>`;
-    h+='<h3>Penalty yards</h3>'+padHTML(p.penYds||0,'penYds');
-    h+=`<div class="field" style="margin-top:8px"><label class="f">What for (optional)</label>
-        <input type="text" data-inp="note" value="${esc(p.note||'')}" placeholder="Holding, false start…"></div>`;
-    h+=flagHTML([{k:'autoFd',label:'Automatic 1st down',on:p.autoFd},
-                 {k:'lossOfDown',label:'Loss of down',on:p.lossOfDown},
-                 {k:'replay',label:'Replay the down',on:p.replay}]);
+    const on = p.penOn || 'us';
+    h+=`<h3>Who committed it</h3>
+      <div class="seg p" style="margin-bottom:10px">
+        <button data-pen="us" class="${on==='us'?'on':''}">${esc(usName())}</button>
+        <button data-pen="them" class="${on==='them'?'on':''}">${esc(themName())}</button></div>`;
+    h+='<h3>What for</h3><div class="penlist">'+PENALTIES.map((x,i)=>
+        `<button class="pen ${p.note===x[0]?'on':''}" data-penpick="${i}">${esc(x[0])}<i>${x[1]}</i></button>`).join('')+'</div>';
+    h+=`<hr><h3>Yards marked off</h3>
+      <div class="flags">${[5,10,15].map(n=>
+        `<button class="flag ${p.penYds===n?'on':''}" data-penyds="${n}">${n} yards</button>`).join('')}
+        <button class="flag ghost" data-penyds="other">Other…</button></div>`;
+    h+=flagHTML([{k:'autoFd',label:'Automatic 1st down',on:p.autoFd,kind:'good'},
+                 {k:'replay',label:'Replay the down',on:p.replay},
+                 {k:'declined',label:'Declined',on:p.declined}]);
+    h+=penaltyPreviewHTML();
   }
   else if(E.type==='note'){
     h+=`<div class="field"><label class="f">Note</label>
@@ -988,9 +1162,38 @@ function formHTML(g){
   return h;
 }
 
+/* spells out exactly what the flag does, so nobody has to guess the sign */
+function penaltyPreviewHTML(){
+  const p=E.p, on=p.penOn||'us';
+  const offence = (on === p.poss);
+  const yds = p.penYds||0;
+  if(p.declined) return `<div class="note" style="margin:10px 0">Declined — no yardage, down and spot unchanged.</div>`;
+  if(!yds) return `<div class="warnbox" style="margin:10px 0">Pick the penalty and the yardage.</div>`;
+  const res = nextSit({q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot},
+                      Object.assign({}, p, {penOn:on, fd: !!p.autoFd && !offence}));
+  const who = on==='us' ? usName() : themName();
+  const moved = offence ? `${who} loses ${yds}` : `${who==='us'?usName():who} gives up ${yds}`;
+  const gain = offence ? 'back' : 'forward';
+  const off = p.poss==='us'?usName():themName();
+  return `<div class="note" style="margin:10px 0">
+    ${esc(who)} committed it, so ${esc(off)} moves ${gain} ${yds} ${plural(yds,'yard')} ·
+    ${esc(off)} ${esc(sitText(res))} at ${esc(spotLabel(res.spot))}</div>`;
+}
 function previewHTML(){
   const p=E.p, g=game(); if(!g) return '';
   if(['penalty','note','pat'].includes(E.type)) return '';
+  if(E.type==='punt' || E.type==='kickoff'){
+    const isPunt = E.type==='punt';
+    const m = p.manualYds ? {yds:p.yds||0, retYds:p.retYds||0, end:null} : kickMath(p);
+    const tmp = Object.assign({}, p, {yds:m.yds, retYds:m.retYds});
+    const res = nextSit({q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot}, tmp);
+    const bits = [`${m.yds} yd ${isPunt?'punt':'kickoff'}`];
+    if(m.retYds) bits.push(`${m.retYds} yd return`);
+    if(p.touchback) bits.push('touchback');
+    if(isPunt && p.poss==='us' && !p.touchback && m.end!=null && m.end>=80) bits.push('inside the 20');
+    bits.push(`${res.poss==='us'?usName():themName()} ball at ${spotLabel(res.spot)}`);
+    return `<div class="note" style="margin:10px 0">${esc(bits.join(' · '))}</div>`;
+  }
   const eff = effectiveGain(p);
   const res = applyGain({q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot}, eff);
   let msg='', cls='note';
@@ -1020,6 +1223,11 @@ function commitPlay(){
     if(p.result==='sack'){ p.type='sack'; p.sackYds = Math.abs(p.yds||0); }
     if(p.result==='inc'){ p.yds=0; }
   }
+  if((p.type==='punt'||p.type==='kickoff') && !p.manualYds){
+    const m=kickMath(p);
+    p.yds=m.yds; p.retYds=m.retYds;
+    if(p.type==='punt' && p.poss==='us') p.inside20 = !p.touchback && !p.retTd && m.end>=80;
+  }
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
@@ -1031,7 +1239,11 @@ function commitPlay(){
     if(res._fd && !p.fum) p.fd=true;
     if(p.int||p.fumLost) p.fd=false;
   }
-  if(p.type==='penalty') p.fd = !!p.autoFd && (p.penOn !== p.poss);
+  if(p.type==='penalty'){
+    p.penYds = Math.abs(p.penYds||0);          // magnitude only; direction comes from who did it
+    if(p.declined){ p.penYds = 0; p.autoFd = false; }
+    p.fd = !!p.autoFd && (p.penOn !== p.poss);
+  }
 
   if(UI.editingId){
     const i=g.plays.findIndex(x=>x.id===UI.editingId);
@@ -1138,6 +1350,32 @@ function askNumber(title, value, cb){
       const i=$('#askN',body); i.focus(); i.select();
       $('#askOK',body).onclick=()=>{ const v=parseInt(i.value,10); closeModal(); cb(isNaN(v)?0:v); };
       i.onkeydown=e=>{ if(e.key==='Enter') $('#askOK',body).click(); };
+    });
+}
+
+/* type an exact yard line instead of stepping to it */
+function askSpot(title, spot, cb){
+  const v = clamp(spot==null?50:spot, 0, 100);
+  let side = v<=50 ? 'own' : 'opp';
+  const yl = v<=50 ? v : 100-v;
+  openModal(title, `<div class="card">
+      <div class="field"><label class="f">Whose end of the field</label>
+        <div class="seg p" id="asSide">
+          <button data-v="own" class="${side==='own'?'on':''}">${esc(usName())}</button>
+          <button data-v="opp" class="${side==='opp'?'on':''}">${esc(themName())}</button>
+        </div></div>
+      <div class="field"><label class="f">Yard line</label>
+        <input type="number" id="asYL" value="${yl}" min="0" max="50" step="1" inputmode="numeric"></div>
+      <button class="btn p wide" id="asOK">Set it</button>
+    </div>`, body=>{
+      const i=$('#asYL',body);
+      setTimeout(()=>{ i.focus(); i.select(); }, 30);
+      $$('#asSide button',body).forEach(b=> b.onclick=()=>{ side=b.dataset.v;
+        $$('#asSide button',body).forEach(x=>x.classList.toggle('on', x===b)); });
+      const go=()=>{ const n=clamp(parseInt(i.value,10)||0, 0, 50);
+        closeModal(); cb(side==='own' ? n : 100-n); };
+      $('#asOK',body).onclick=go;
+      i.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } };
     });
 }
 
@@ -1274,7 +1512,7 @@ function openSituation(){
       </div>
       <div class="f2">
         <div class="field"><label class="f">Ball on</label>
-          <div class="seg" id="mSide"><button data-v="own" class="${side==='own'?'on':''}">Own</button><button data-v="opp" class="${side==='opp'?'on':''}">Opp</button></div></div>
+          <div class="seg" id="mSide"><button data-v="own" class="${side==='own'?'on':''}">${esc(usShort())}</button><button data-v="opp" class="${side==='opp'?'on':''}">${esc(themShort())}</button></div></div>
         <div class="field"><label class="f">Yard line</label><input type="number" id="mYL" value="${yl}" min="1" max="50"></div>
       </div>
       <button class="btn p wide" id="mSave">Set it</button>
@@ -1505,6 +1743,8 @@ function wire(){
     else toast('That file is not a stats backup');
   });
   $('#btnHelp').onclick=showHelp;
+  $('#appVer').textContent = APP_VERSION;
+  $('#btnUpdate').onclick=forceUpdate;
   $('#filePick').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
     const r=new FileReader();
@@ -1529,6 +1769,21 @@ function wire(){
   });
 }
 
+/* Clears the offline cache and reloads. Games, roster and season totals live in
+   local storage and are NOT touched by this — only the cached copy of the app. */
+async function forceUpdate(){
+  saveNow();
+  toast('Fetching the latest version…');
+  try{
+    if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); }
+    if(navigator.serviceWorker){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister().catch(()=>{})));
+    }
+  }catch(e){}
+  setTimeout(()=>location.reload(true), 400);
+}
+
 function confirmBox(msg, cb){
   openModal('Are you sure?', `<div class="card"><p>${esc(msg)}</p>
     <div class="row"><button class="btn bad grow" id="cYes">Yes, do it</button>
@@ -1549,6 +1804,11 @@ function onEntryClick(e){
 
   const act=t.closest('[data-act]');
   if(act){
+    if(act.dataset.act==='togglemode'){
+      p.manualYds=!p.manualYds;
+      if(!p.manualYds) initKickSpots(p, E.type==='punt'?40:55);
+      return renderEntry();
+    }
     if(act.dataset.act==='cancel') return cancelEntry();
     if(act.dataset.act==='save')   return commitPlay();
     if(act.dataset.act==='delete') return deleteEditing();
@@ -1560,10 +1820,31 @@ function onEntryClick(e){
     else p[role] = (String(p[role])===String(num)) ? null : num;
     return renderEntry();
   }
+  const sa=t.closest('[data-showall]'); if(sa){ const r=sa.dataset.showall;
+    UI.showAll[r]=!UI.showAll[r]; return renderEntry(); }
+  const dm=t.closest('[data-defmore]'); if(dm){ UI.defMore=!UI.defMore; return renderEntry(); }
+  const dg=t.closest('[data-deflegend]'); if(dg){ UI.defLegend=!UI.defLegend; return renderEntry(); }
   const ds=t.closest('[data-defstat]'); if(ds){ UI.defStat=ds.dataset.defstat; return renderEntry(); }
   const dt=t.closest('[data-deltag]'); if(dt){ p.def.splice(parseInt(dt.dataset.deltag,10),1); return renderEntry(); }
   const ty=t.closest('[data-tagy]'); if(ty){ const [i,d]=ty.dataset.tagy.split(',').map(Number);
     p.def[i].y=Math.max(0,(p.def[i].y||0)+d); return renderEntry(); }
+  const sd=t.closest('[data-side]'); if(sd){
+    const bits=sd.dataset.side.split('|'), f=bits[0], side=bits[1];
+    const v = p[f]==null?50:p[f], yl = v<=50 ? v : 100-v;
+    p[f] = side==='own' ? yl : 100-yl;
+    return renderEntry(); }
+  const ss=t.closest('[data-spotset]'); if(ss){
+    const bits=ss.dataset.spotset.split('|'), f=bits[0], n=parseInt(bits[1],10);
+    const v = p[f]==null?50:p[f];
+    p[f] = (v<=50) ? n : 100-n;
+    return renderEntry(); }
+  const sp=t.closest('[data-spotstep]'); if(sp){
+    const bits=sp.dataset.spotstep.split('|'), f=bits[0], d=parseInt(bits[1],10);
+    p[f] = clamp((p[f]==null?50:p[f]) + d, 0, 100);
+    return renderEntry(); }
+  const se=t.closest('[data-spotedit]'); if(se){
+    const bits=se.dataset.spotedit.split('|'), f=bits[0], label=bits[1]||'Yard line';
+    return askSpot(label, p[f], v=>{ p[f]=v; renderEntry(); }); }
   const st=t.closest('[data-step]'); if(st){ const f=st.dataset.field;
     p[f]=(p[f]||0)+parseInt(st.dataset.step,10); return renderEntry(); }
   const sv=t.closest('[data-set]'); if(sv){ p[sv.dataset.field]=parseInt(sv.dataset.set,10); return renderEntry(); }
@@ -1581,7 +1862,14 @@ function onEntryClick(e){
   const pg=t.closest('[data-pg]'); if(pg){ p.patGood = pg.dataset.pg==='1'; return renderEntry(); }
   const ct=t.closest('[data-ct]'); if(ct){ p.convType=ct.dataset.ct; return renderEntry(); }
   const tg=t.closest('[data-two]'); if(tg){ p.twoPtGood = tg.dataset.two==='1'; return renderEntry(); }
-  const pn=t.closest('[data-pen]'); if(pn){ p.penOn=pn.dataset.pen; return renderEntry(); }
+  const pn=t.closest('[data-pen]'); if(pn){ p.penOn=pn.dataset.pen; applyPenAuto(p); return renderEntry(); }
+  const pp=t.closest('[data-penpick]'); if(pp){
+    const x=PENALTIES[parseInt(pp.dataset.penpick,10)];
+    p.note=x[0]; p.penYds=x[1]; p.penAuto=!!x[2]; applyPenAuto(p);
+    return renderEntry(); }
+  const py=t.closest('[data-penyds]'); if(py){
+    if(py.dataset.penyds==='other') return askNumber('Yards marked off', p.penYds||0, v=>{ p.penYds=Math.abs(v); renderEntry(); });
+    p.penYds=parseInt(py.dataset.penyds,10); return renderEntry(); }
 }
 </script>
 <script>
@@ -1974,7 +2262,7 @@ function showHelp(){
   openModal('How to use it', `<div class="card small">
     <p><b>Before the game.</b> Add your roster once in Setup (paste it in), put your team name in, then tap <b>+ New game</b>.</p>
     <p><b>During the game.</b> The Game tab always shows whose ball it is and the down &amp; distance. Tap the play type, tap the player, tap the yards, tap <b>Save play</b>. Down, distance, field position, first downs and the score all keep themselves up to date.</p>
-    <p><b>On defense.</b> Switch to <i>Their ball</i>, log their play, then pick a stat code (T, A, SK, INT…) and tap the jersey numbers who earned it. Sacks, picks and fumble recoveries have a yardage stepper on the tag.</p>
+    <p><b>On defense.</b> Switch the ball over to the other team, log their play, then pick a stat code (T, A, SK, INT…) and tap the jersey numbers who earned it. Sacks, picks and fumble recoveries have a yardage stepper on the tag.</p>
     <p><b>Made a mistake?</b> <b>Undo</b> up top removes the last play. Tap any play in the list to edit or delete it. <b>Fix down / spot</b> resets the situation whenever the app and the chain gang disagree.</p>
     <p><b>Two scorers.</b> Run this on both devices. Afterwards, Export the game from the backup device, then on the main device use <b>Import &amp; compare</b> under Reports — it shows only the plays the backup caught that you missed.</p>
     <p><b>After the game.</b> Reports → MaxPreps entry sheet gives you every number in the order MaxPreps asks for it. Box score and Recap print to PDF.</p>
