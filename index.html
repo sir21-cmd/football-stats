@@ -245,12 +245,21 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
   box-shadow:0 8px 24px #0f172a55; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; max-width:90vw; text-align:center}
 #toast.on{opacity:1; transform:translateX(-50%) translateY(-6px)}
 
+.pagebreak{height:0}
 @media print{
+  .pagebreak{break-before:page; page-break-before:always}
   #top,#tabs,.noprint,#toast{display:none !important}
   body{background:#fff}
   main{padding:0; max-width:none}
   .card,.sheet{box-shadow:none; border:0; padding:0; margin:0 0 10px}
-  table{font-size:9.5pt}
+  /* paper can't scroll sideways — make sure nothing is silently cut off */
+  .tblwrap{overflow:visible !important}
+  table{font-size:9.5pt; width:100%}
+  table.wide{font-size:7.4pt}
+  table.wide th, table.wide td{padding:2px 2px; letter-spacing:-.01em}
+  /* long names would otherwise hold the whole table open */
+  th:nth-child(2), td:nth-child(2){white-space:normal; word-break:break-word}
+  table.wide th:nth-child(2), table.wide td:nth-child(2){max-width:92px}
   th,td{padding:3px 5px; border-bottom:1px solid #bbb}
   th{background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   .statgrp{break-inside:avoid; page-break-inside:avoid}
@@ -366,9 +375,9 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
     <div class="card noprint">
       <h3>Game reports</h3>
       <div class="bigrow">
+        <button class="btn p" data-rep="report">Game report<small>send to coaches</small></button>
         <button class="btn" data-rep="maxpreps">MaxPreps<small>entry sheet</small></button>
-        <button class="btn" data-rep="box">Box score<small>printable</small></button>
-        <button class="btn" data-rep="recap">Recap<small>drive + scoring</small></button>
+        <button class="btn" data-rep="both">Both<small>one PDF</small></button>
       </div>
       <hr>
       <h3>Export</h3>
@@ -468,7 +477,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.17-23';
+const APP_VERSION = '2026.08.21-25';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2158,6 +2167,13 @@ function onEntryClick(e){
 function T(cols, rows, opts){
   opts=opts||{};
   if(!rows.length) return `<p class="small muted" style="margin:2px 0 10px">${esc(opts.empty||'None')}</p>`;
+  // On paper there's no sideways scroll, so a column of nothing but zeros is
+  // pure cost. Drop the optional ones nobody registered in this game.
+  if(opts.hideEmpty){
+    const blank = v => v==null || ['0','','0/0','0.0','—'].indexOf(String(v))>=0;
+    cols = cols.filter(c => !c.opt || rows.some(r => !blank(c.f ? c.f(r) : r[c.k])));
+  }
+  const wide = cols.length > 10 ? ' class="wide"' : '';
   const head = cols.map(c=>`<th title="${esc(c.t||c.l)}">${esc(c.l)}</th>`).join('');
   const body = rows.map(r=>'<tr>'+cols.map(c=>{
       const v = c.f? c.f(r) : r[c.k];
@@ -2174,7 +2190,7 @@ function T(cols, rows, opts){
       return '<td></td>';
     }).join('')+'</tr></tfoot>';
   }
-  return `<div class="tblwrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
+  return `<div class="tblwrap"><table${wide}><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
 }
 const C_NUM = {k:'num', l:'#'};
 const C_NAME= {k:'name', l:'Player', f:r=>r.name||('#'+r.num)};
@@ -2182,19 +2198,19 @@ const avg = (y,a)=> a? (y/a).toFixed(1) : '0.0';
 
 const COLS = {
   rush:[C_NUM,C_NAME,{k:'att',l:'Att',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.att)},
-        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1},{k:'fum',l:'Fum',sum:1}],
+        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
   pass:[C_NUM,C_NAME,{k:'comp',l:'Comp',sum:1},{k:'att',l:'Att',sum:1},{k:'pct',l:'Pct',f:r=>r.att?Math.round(r.comp/r.att*100)+'%':'—'},
-        {k:'yds',l:'Yds',sum:1},{k:'td',l:'TD',sum:1},{k:'int',l:'Int',sum:1},{k:'long',l:'Long',sum:1},{k:'fum',l:'Fum',sum:1}],
+        {k:'yds',l:'Yds',sum:1},{k:'td',l:'TD',sum:1},{k:'int',l:'Int',sum:1},{k:'long',l:'Long',sum:1},{k:'fum',l:'Fum',sum:1,opt:1}],
   rec:[C_NUM,C_NAME,{k:'rec',l:'Rec',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.rec)},
-       {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1},{k:'fum',l:'Fum',sum:1}],
-  def:[C_NUM,C_NAME,{k:'t',l:'Solo',sum:1},{k:'a',l:'Ast',sum:1},{k:'tot',l:'Tot',sum:1},{k:'tfl',l:'TFL',sum:1},
-       {k:'sk',l:'Sack',sum:1},{k:'skYds',l:'SkYd',sum:1},{k:'int',l:'Int',sum:1},{k:'intYds',l:'IntYd',sum:1},
-       {k:'pd',l:'PD',sum:1},{k:'fc',l:'FF',sum:1},{k:'fr',l:'FR',sum:1},{k:'frYds',l:'FRYd',sum:1},
-       {k:'hur',l:'Hur',sum:1},{k:'bk',l:'Blk',sum:1},{k:'bpt',l:'BPt',sum:1},{k:'saf',l:'Saf',sum:1},{k:'td',l:'TD',sum:1}],
+       {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
+  def:[C_NUM,C_NAME,{k:'t',l:'Solo',sum:1},{k:'a',l:'Ast',sum:1},{k:'tot',l:'Tot',sum:1},{k:'tfl',l:'TFL',sum:1,opt:1},
+       {k:'sk',l:'Sack',sum:1,opt:1},{k:'skYds',l:'SkYd',sum:1,opt:1},{k:'int',l:'Int',sum:1,opt:1},{k:'intYds',l:'IntYd',sum:1,opt:1},
+       {k:'pd',l:'PD',sum:1,opt:1},{k:'fc',l:'FF',sum:1,opt:1},{k:'fr',l:'FR',sum:1,opt:1},{k:'frYds',l:'FRYd',sum:1,opt:1},
+       {k:'hur',l:'Hur',sum:1,opt:1},{k:'bk',l:'Blk',sum:1,opt:1},{k:'bpt',l:'BPt',sum:1,opt:1},{k:'saf',l:'Saf',sum:1,opt:1},{k:'td',l:'TD',sum:1,opt:1}],
   ret:[C_NUM,C_NAME,{k:'ret',l:'Ret',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.ret)},
-       {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'fc',l:'FC',sum:1}],
+       {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1,opt:1},{k:'fc',l:'FC',sum:1,opt:1}],
   punt:[C_NUM,C_NAME,{k:'no',l:'Punts',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no)},
-        {k:'long',l:'Long',sum:1},{k:'in20',l:'In 20',sum:1},{k:'blk',l:'Blkd',sum:1}],
+        {k:'long',l:'Long',sum:1},{k:'in20',l:'In 20',sum:1},{k:'blk',l:'Blkd',sum:1,opt:1}],
   ko:[C_NUM,C_NAME,{k:'no',l:'KO',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no)},
       {k:'long',l:'Long',sum:1},{k:'tb',l:'TB',sum:1}],
   kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga},{k:'fgLong',l:'Long',sum:1},
@@ -2217,17 +2233,18 @@ function renderStats(){
   }
   if(UI.statSide==='def') h+=grp('Defense', T(COLS.def, s.defense, {empty:'No defensive stats tagged yet'}));
   if(UI.statSide==='st'){
-    h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None'}));
-    h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None'}));
-    h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None'}));
-    h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None'}));
-    h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None'}));
+    h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None', hideEmpty:true}));
+    h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None', hideEmpty:true}));
+    h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
+    h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None', hideEmpty:true}));
+    h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
   }
   if(UI.statSide==='team'){ h+=teamHTML(g,s); }
   h+='</div>';
   box.innerHTML=h;
 }
-function teamHTML(g,s){
+function teamHTML(g,s,opts){
+  opts = opts || {};
   const t=s.team;
   const line=(l,a,b)=>`<tr><td>${esc(l)}</td><td class="num">${a}</td><td class="num">${b}</td></tr>`;
   let h=`<div class="statgrp"><h3>Score by quarter</h3><div class="tblwrap"><table>
@@ -2248,11 +2265,22 @@ function teamHTML(g,s){
     ${line('4th down', t.fourthConv+'/'+t.fourthAtt, '—')}
     ${line('Sacks allowed', t.sacksAllowed, '—')}
     </tbody></table></div></div>`;
-  h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet', total:false})}</div>`;
-  const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
-  if(sc.length) h+=`<div class="statgrp"><h3>Scoring plays</h3><div class="plays">`+
-    sc.map(p=>playHTML(p,g.plays.indexOf(p))).join('')+'</div></div>';
+  if(opts.scoringSummary!==false)
+    h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet', total:false})}</div>`;
+  if(opts.scoringPlays!==false){
+    const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
+    if(sc.length) h+=`<div class="statgrp"><h3>Scoring plays</h3><div class="plays">`+
+      sc.map(p=>playHTML(p,g.plays.indexOf(p))).join('')+'</div></div>';
+  }
   return h;
+}
+/* Scoring plays as a clean numbered list — prints better than the play cards */
+function scoringListHTML(g){
+  const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
+  return `<div class="statgrp"><h3>Scoring plays</h3>`+(sc.length?
+    '<ol class="small" style="margin:0; padding-left:20px">'+sc.map(p=>
+      `<li>${qLabel(p.q)} — <b>${esc(p.poss==='us'?usName():themName())}</b>: ${esc(playText(p))}</li>`).join('')+'</ol>'
+    : '<p class="small muted">No scoring recorded.</p>')+'</div>';
 }
 
 /* ---------- reports ---------- */
@@ -2265,6 +2293,8 @@ function runReport(kind){
   if(kind==='backup')   return exportGame(g);
   const box=$('#repBody');
   if(kind==='maxpreps') box.innerHTML = maxprepsHTML(g,s);
+  if(kind==='report')   box.innerHTML = gameReportHTML(g,s);
+  if(kind==='both')     box.innerHTML = bothHTML(g,s);
   if(kind==='box')      box.innerHTML = boxHTML(g,s);
   if(kind==='recap')    box.innerHTML = recapHTML(g,s);
   box.scrollIntoView({behavior:'smooth', block:'start'});
@@ -2279,9 +2309,10 @@ function repHead(g, title){
 }
 function mpRow(label, cols){ return `<tr><td>${esc(label)}</td>${cols.map(c=>`<td class="num">${c}</td>`).join('')}</tr>`; }
 
-function maxprepsHTML(g,s){
+function maxprepsHTML(g,s,opts){
+  opts = opts || {};
   const sec=(title, cols, rows)=> `<div class="statgrp"><h3>${esc(title)}</h3>`+
-    (rows.length? `<div class="tblwrap"><table><thead><tr><th>#</th><th>Player</th>${cols.map(c=>`<th>${esc(c[0])}</th>`).join('')}</tr></thead><tbody>`+
+    (rows.length? `<div class="tblwrap"><table${cols.length>6?' class="wide"':''}><thead><tr><th>#</th><th>Player</th>${cols.map(c=>`<th>${esc(c[0])}</th>`).join('')}</tr></thead><tbody>`+
       rows.map(r=>`<tr><td><b>${esc(r.num)}</b></td><td>${esc(r.name||'')}</td>${cols.map(c=>`<td class="num">${c[1](r)}</td>`).join('')}</tr>`).join('')+
       '</tbody></table></div>' : '<p class="small muted">None</p>')+'</div>';
   let h=`<div class="sheet">${repHead(g,'MaxPreps entry sheet')}
@@ -2311,22 +2342,55 @@ function maxprepsHTML(g,s){
         ['PAT Made',r=>r.patMade],['PAT Att',r=>r.patAtt],['Conv Runs',r=>r.convRun],['Conv Rec',r=>r.convRec],
         ['Conv Def Ret',r=>r.convDef],['FG Made',r=>r.fgMade],['FG Att',r=>r.fgAtt],['FG Longest',r=>r.fgLong],
         ['Safety',r=>r.saf]], s.scoring);
-  h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div>`;
+  if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div>`;
   h+='</div>';
   return h;
+}
+/* One document for coaches: the story, the team numbers, the scoring, then
+   every stat line. Nothing appears twice. */
+function gameReportHTML(g,s,opts){
+  opts = opts || {};
+  const verb = s.score.usTotal>s.score.themTotal ? 'beat'
+             : (s.score.usTotal<s.score.themTotal ? 'fell to' : 'tied');
+  let h=`<div class="sheet">${repHead(g,'Game report')}`;
+  h+=`<p style="font-size:1.02rem; margin-top:0">${esc(usName())} ${verb} ${esc(g.opponent)}
+      <b>${s.score.usTotal}&ndash;${s.score.themTotal}</b>${g.place?' at '+esc(g.place):''} on ${esc(g.date)}.
+      ${esc(usName())} finished with ${s.team.totalYards} total yards — ${s.team.rushYds} rushing,
+      ${s.team.passYds} passing — and ${s.team.firstDowns} first ${plural(s.team.firstDowns,'down')}.</p>`;
+  h+=teamHTML(g,s,{scoringSummary:false, scoringPlays:false});
+  h+=scoringListHTML(g);
+  h+=grp('Rushing', T(COLS.rush, s.rushing, {empty:'None', hideEmpty:true}));
+  h+=grp('Passing', T(COLS.pass, s.passing, {empty:'None', hideEmpty:true}));
+  h+=grp('Receiving', T(COLS.rec, s.receiving, {empty:'None', hideEmpty:true}));
+  h+=grp('Defense', T(COLS.def, s.defense, {empty:'None', hideEmpty:true}));
+  h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None', hideEmpty:true}));
+  h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None', hideEmpty:true}));
+  h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
+  h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
+  if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px">
+    <button class="btn p" onclick="window.print()">Print / save as PDF</button></div>`;
+  h+='</div>';
+  return h;
+}
+function bothHTML(g,s){
+  return gameReportHTML(g,s,{noPrint:true}) +
+    '<div class="pagebreak"></div>' + maxprepsHTML(g,s,{noPrint:true}) +
+    `<div class="row noprint" style="margin:12px 0">
+       <button class="btn p" onclick="window.print()">Print / save as PDF</button>
+       <span class="small muted">Two pages in one PDF — the coach report, then the MaxPreps sheet.</span></div>`;
 }
 function boxHTML(g,s){
   const t=s.team;
   let h=`<div class="sheet">${repHead(g,'Box score')}`;
   h+=teamHTML(g,s);
-  h+=grp('Rushing', T(COLS.rush, s.rushing, {empty:'None'}));
-  h+=grp('Passing', T(COLS.pass, s.passing, {empty:'None'}));
-  h+=grp('Receiving', T(COLS.rec, s.receiving, {empty:'None'}));
-  h+=grp('Defense', T(COLS.def, s.defense, {empty:'None'}));
-  h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None'}));
-  h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None'}));
-  h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None'}));
-  h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None'}));
+  h+=grp('Rushing', T(COLS.rush, s.rushing, {empty:'None', hideEmpty:true}));
+  h+=grp('Passing', T(COLS.pass, s.passing, {empty:'None', hideEmpty:true}));
+  h+=grp('Receiving', T(COLS.rec, s.receiving, {empty:'None', hideEmpty:true}));
+  h+=grp('Defense', T(COLS.def, s.defense, {empty:'None', hideEmpty:true}));
+  h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None', hideEmpty:true}));
+  h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None', hideEmpty:true}));
+  h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
+  h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
   h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div></div>`;
   return h;
 }
@@ -2425,17 +2489,17 @@ function renderSeason(){
   const withGP = cols => [cols[0],cols[1],GP].concat(cols.slice(2));
   let h='<div class="card">';
   if(UI.seasonSide==='off'){
-    h+=grp('Rushing', T(withGP(COLS.rush), s.rushing, {empty:'None'}));
-    h+=grp('Passing', T(withGP(COLS.pass), s.passing, {empty:'None'}));
-    h+=grp('Receiving', T(withGP(COLS.rec), s.receiving, {empty:'None'}));
+    h+=grp('Rushing', T(withGP(COLS.rush), s.rushing, {empty:'None', hideEmpty:true}));
+    h+=grp('Passing', T(withGP(COLS.pass), s.passing, {empty:'None', hideEmpty:true}));
+    h+=grp('Receiving', T(withGP(COLS.rec), s.receiving, {empty:'None', hideEmpty:true}));
   }
-  if(UI.seasonSide==='def') h+=grp('Defense', T(withGP(COLS.def), s.defense, {empty:'None'}));
+  if(UI.seasonSide==='def') h+=grp('Defense', T(withGP(COLS.def), s.defense, {empty:'None', hideEmpty:true}));
   if(UI.seasonSide==='st'){
-    h+=grp('Punt returns', T(withGP(COLS.ret), s.puntRet, {empty:'None'}));
-    h+=grp('Kickoff returns', T(withGP(COLS.ret), s.koRet, {empty:'None'}));
-    h+=grp('Punting', T(withGP(COLS.punt), s.punts, {empty:'None'}));
-    h+=grp('Kickoffs', T(withGP(COLS.ko), s.kickoffs, {empty:'None'}));
-    h+=grp('Place kicking', T(withGP(COLS.kick), s.kicking, {empty:'None'}));
+    h+=grp('Punt returns', T(withGP(COLS.ret), s.puntRet, {empty:'None', hideEmpty:true}));
+    h+=grp('Kickoff returns', T(withGP(COLS.ret), s.koRet, {empty:'None', hideEmpty:true}));
+    h+=grp('Punting', T(withGP(COLS.punt), s.punts, {empty:'None', hideEmpty:true}));
+    h+=grp('Kickoffs', T(withGP(COLS.ko), s.kickoffs, {empty:'None', hideEmpty:true}));
+    h+=grp('Place kicking', T(withGP(COLS.kick), s.kicking, {empty:'None', hideEmpty:true}));
     h+=grp('Scoring', T(withGP(COLS.score), s.scoring, {empty:'None', total:false}));
   }
   if(UI.seasonSide==='games'){
