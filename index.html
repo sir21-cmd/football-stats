@@ -106,6 +106,10 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
 .chip.prime .cpos{background:var(--ink)}
 .chip.prime.on{border-color:var(--accent); background:#eff6ff}
 .flag.ghost{border-style:dashed; color:var(--muted); font-weight:600}
+.flag.xs{min-height:32px; padding:5px 10px; font-size:.7rem; letter-spacing:.03em}
+.switcher{display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 0 10px;
+  margin-bottom:8px; border-bottom:1px solid var(--line)}
+.switcher .seg button{min-height:34px; padding:6px 12px; font-size:.8rem}
 /* ---------- field strip ---------- */
 .gridiron{position:relative; height:42px; border-radius:8px; overflow:hidden;
   background:#d8e3ec; border:1px solid #c3d0db; margin:10px 0 2px}
@@ -297,7 +301,10 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
             <button data-poss="us" class="on">Our ball</button>
             <button data-poss="them">Their ball</button>
           </div>
-          <button class="btn sm ghost" id="btnEditSit">Fix down / spot</button>
+          <div class="row tight">
+            <button class="btn sm ghost" id="btnEditSit">Fix down / spot</button>
+            <button class="btn sm ghost" id="btnFinish">Finish game</button>
+          </div>
         </div>
         <div id="fieldStrip"></div>
       </div>
@@ -325,8 +332,16 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
           <button data-f="scores">Scores</button>
         </div>
         <span class="grow"></span>
-        <button class="btn sm" id="btnAddManual">+ Add play</button>
+        <button class="btn sm" id="btnAddManual">+ Add at end</button>
       </div>
+      <hr>
+      <div class="row tight">
+        <label class="f" style="margin:0 2px 0 0">Play #</label>
+        <input type="number" id="playNum" min="1" placeholder="12" style="width:88px; min-height:38px">
+        <button class="btn sm" id="btnGoPlay">Open it</button>
+        <button class="btn sm ghost" id="btnInsertPlay">Insert before it</button>
+      </div>
+      <p class="tiny muted" style="margin:6px 0 0">Open it to change or replace that play. Insert before it to slot in a play you missed.</p>
     </div>
     <div class="plays" id="allPlays"></div>
   </section>
@@ -453,7 +468,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.16-17';
+const APP_VERSION = '2026.08.17-23';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -790,7 +805,8 @@ function totalRow(list, keys){
    UI STATE + PLAY ENTRY
    ========================================================================= */
 const UI = { view:'game', statSide:'off', seasonSide:'off', playFilter:'all',
-             defStat:'T', recent:{}, editingId:null, showAll:{}, defMore:false, defLegend:false };
+             defStat:'T', recent:{}, editingId:null, insertAt:null,
+             showAll:{}, defMore:false, defLegend:false };
 let E = null;   // current entry draft
 
 const QUICK_YDS = [-10,-5,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,35,40,50,60];
@@ -1017,6 +1033,22 @@ function flagHTML(list){
   return '<div class="flags">'+list.map(f=>
     `<button class="flag ${f.on?'on':''} ${f.kind||''}" data-flag="${f.k}">${esc(f.label)}</button>`).join('')+'</div>';
 }
+/* Our defence only earns stats when the other team has the ball — or when we
+   kick and cover. Anywhere else, defensive tags can't apply. */
+function showsDefPanel(type, poss){
+  if(type==='punt' || type==='kickoff') return poss==='us';
+  if(type==='penalty' || type==='note') return false;
+  return poss==='them';
+}
+/* Drop tags that the new shape of the play can no longer justify, and say so —
+   otherwise they'd sit there invisibly and still count in the stats. */
+function pruneDefTags(p, type){
+  if(p.def && p.def.length && !showsDefPanel(type, p.poss)){
+    const n = p.def.length;
+    p.def = [];
+    toast(n+' defensive '+plural(n,'tag')+' removed — they don\'t apply to this play');
+  }
+}
 function defPanelHTML(){
   const tags = (E.p.def||[]);
   let h='<hr><h3>Defense</h3>';
@@ -1045,17 +1077,52 @@ function defPanelHTML(){
 }
 
 /* ---------- entry state machine ---------- */
+/* the sensible starting state for each play type — used when you pick a type
+   and again when you switch a play from one type to another */
+function typeDefaults(p, type){
+  p.type = type;
+  if(type==='pass'){ if(!p.result) p.result='comp'; if(!p.passer) p.passer=(UI.recent.passer||[])[0]||null; }
+  if(type==='punt'){ if(!p.punter) p.punter=(UI.recent.punter||[])[0]||null; initKickSpots(p, 40); }
+  if(type==='kickoff'){ if(!p.kicker) p.kicker=(UI.recent.kicker||[])[0]||null; initKickSpots(p, 55); }
+  if(type==='fg'){ if(!p.kicker) p.kicker=(UI.recent.kicker||[])[0]||null;
+    if(p.fgDist==null) p.fgDist=fgSuggest(p); if(p.fgGood==null) p.fgGood=true; }
+  if(type==='pat'){ if(!p.patKind) p.patKind='kick'; if(p.patGood==null) p.patGood=true; }
+  if(type==='penalty'){ if(!p.penOn) p.penOn='us'; if(p.penYds==null) p.penYds=0; }
+  return p;
+}
 function startEntry(type){
   const g=game(); if(!g) return;
   const s=g.sit;
-  E = { type:type, p:{ id:DB.deviceId+'-'+uid(), dev:DB.deviceId, t:nowISO(),
-        q:s.q, poss:s.poss, down:s.down, dist:s.dist, spot:s.spot, type:type,
-        yds:0, def:[] } };
-  if(type==='pass'){ E.p.result='comp'; E.p.passer = (UI.recent.passer||[])[0]||null; }
-  if(type==='punt'){ E.p.punter = (UI.recent.punter||[])[0]||null; initKickSpots(E.p, 40); }
-  if(type==='kickoff'){ E.p.kicker = (UI.recent.kicker||[])[0]||null; initKickSpots(E.p, 55); }
-  if(type==='fg'){ E.p.kicker=(UI.recent.kicker||[])[0]||null; E.p.fgDist = fgSuggest(s); E.p.fgGood=true; }
-  if(type==='penalty'){ E.p.penOn='us'; E.p.penYds=0; }
+  E = { type:type, p: typeDefaults({ id:DB.deviceId+'-'+uid(), dev:DB.deviceId, t:nowISO(),
+        q:s.q, poss:s.poss, down:s.down, dist:s.dist, spot:s.spot, yds:0, def:[] }, type) };
+  renderEntry();
+}
+/* Switch the play you're working on to a different type, keeping the things
+   that survive the change (when, where, whose ball, defensive tags). */
+const SWITCHABLE = [['run','RUN'],['pass','PASS'],['punt','PUNT'],['kickoff','KICKOFF'],
+                    ['fg','FG'],['pat','PAT'],['penalty','PENALTY'],['note','NOTE']];
+function switchType(type){
+  if(!E) return;
+  const o = E.p;
+  const kept = { id:o.id, dev:o.dev, t:o.t, q:o.q, poss:o.poss, down:o.down, dist:o.dist,
+                 spot:o.spot, def:o.def||[], note:o.note,
+                 sitBefore:o.sitBefore, sitAfter:o.sitAfter, merged:o.merged };
+  E.type = type;
+  E.p = typeDefaults(Object.assign(kept, { yds:0 }), type);
+  pruneDefTags(E.p, type);
+  renderEntry();
+}
+/* Flip which team ran the play, and rebuild the form around it. */
+function switchPoss(poss){
+  if(!E || E.p.poss===poss) return;
+  const p = E.p;
+  p.poss = poss;
+  delete p.scoreBy;                    // re-derived on save from the new possession
+  ['rusher','passer','receiver','returner','kicker','punter'].forEach(k=> p[k]=null);
+  p.landSpot = p.endSpot = null;
+  typeDefaults(p, E.type);
+  applyPenAuto(p);
+  pruneDefTags(p, E.type);
   renderEntry();
 }
 function fgSuggest(s){ return Math.max(17, Math.round((100-s.spot)+17)); }
@@ -1068,7 +1135,7 @@ function initKickSpots(p, typical){
   if(p.landSpot==null) p.landSpot = land;
   if(p.endSpot==null)  p.endSpot  = land;
 }
-function cancelEntry(){ E=null; UI.editingId=null; renderEntry(); }
+function cancelEntry(){ E=null; UI.editingId=null; UI.insertAt=null; renderEntry(); }
 
 function renderEntry(){
   const g=game();
@@ -1076,10 +1143,31 @@ function renderEntry(){
   $('#gameWrap').classList.toggle('hide', !g);
   if(!g) return;
   const box=$('#entry');
+  // a final game hides the play menu, but an open edit still has to render
+  if(g.status==='final' && !E){ box.innerHTML = finalHTML(g); return; }
   if(!E){ box.innerHTML = menuHTML(g); return; }
   box.innerHTML = formHTML(g);
 }
 
+/* A finished game stops accepting plays, so nobody accidentally logs next
+   Friday's opening drive into last Friday's game. Reopening is one tap. */
+function finalHTML(g){
+  const s = computeStats(g);
+  const won = s.score.usTotal > s.score.themTotal, tied = s.score.usTotal === s.score.themTotal;
+  return `<div style="text-align:center; padding:6px 0 2px">
+      <div class="pill" style="background:var(--ink); color:#fff">FINAL</div>
+      <h2 style="margin:10px 0 2px; font-size:1.5rem">${esc(usName())} ${s.score.usTotal} &ndash; ${s.score.themTotal} ${esc(themName())}</h2>
+      <p class="small muted" style="margin:0 0 12px">${tied?'Tie':(won?'Win':'Loss')} · ${g.plays.length} ${plural(g.plays.length,'play')} · ${esc(g.date)}</p>
+      <div class="bigrow" style="max-width:520px; margin:0 auto">
+        <button class="btn p" data-fin="reports">Reports<small>MaxPreps &amp; box score</small></button>
+        <button class="btn" data-fin="backup">Back up<small>save the file</small></button>
+        <button class="btn ghost" data-fin="reopen">Reopen<small>keep logging</small></button>
+      </div>
+      <p class="small muted" style="margin:14px 0 0">Need to fix something? Open the <b>Plays</b> tab and tap the play —
+        corrections still save on a final game. <b>Reopen</b> is only needed to add new plays.</p>
+      <p class="tiny muted" style="margin:8px 0 0">Start next week's game from Setup &rarr; + New game.</p>
+    </div>`;
+}
 function menuHTML(g){
   const ours = g.sit.poss==='us';
   const b=(t,l,s)=>`<button class="btn ${s||''}" data-start="${t}">${l}${s===undefined?'':''}</button>`;
@@ -1107,9 +1195,20 @@ function formHTML(g){
   const T = { run:'Rushing play', pass:'Pass play', punt:'Punt', kickoff:'Kickoff',
               fg:'Field goal', pat:'Extra point', penalty:'Penalty', note:'Note' }[E.type] || 'Play';
   const side = ours ? usName() : themName();
-  let h=`<div class="spread" style="margin-bottom:8px">
-      <h2 style="margin:0">${esc(T)} <span class="muted small">· ${esc(side)}</span></h2>
+  const num = UI.editingId ? (g.plays.findIndex(x=>x.id===UI.editingId)+1) : 0;
+  const lead = num ? `Play #${num} · ` : (UI.insertAt!=null ? `New play at #${UI.insertAt+1} · ` : '');
+  let h=`<div class="spread" style="margin-bottom:6px">
+      <h2 style="margin:0">${lead}${esc(T)} <span class="muted small">· ${esc(side)}</span></h2>
       <button class="btn xs ghost" data-act="cancel">Cancel</button></div>`;
+  // whose play it was, and what kind — changeable at any point, including mid-edit
+  h+=`<div class="switcher">
+      <div class="seg p" style="flex:none">
+        <button data-eposs="us" class="${ours?'on':''}">${esc(usName())}</button>
+        <button data-eposs="them" class="${ours?'':'on'}">${esc(themName())}</button>
+      </div>
+      <div class="flags">${SWITCHABLE.map(x=>
+        `<button class="flag xs ${E.type===x[0]?'on':''}" data-etype="${x[0]}">${x[1]}</button>`).join('')}</div>
+    </div>`;
 
   const prev = previewHTML();
 
@@ -1123,7 +1222,7 @@ function formHTML(g){
       {k:'fum', label:'Fumble', on:p.fum},
       {k:'fumLost', label:'Lost it', on:p.fumLost, kind:'danger'}
     ]);
-    if(!ours) h+=defPanelHTML();
+    if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
   else if(E.type==='pass'){
     h+=`<div class="seg" style="margin-bottom:10px" id="passRes">
@@ -1143,7 +1242,7 @@ function formHTML(g){
     if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'});
     if(p.result==='int') fl.push({k:'retTd', label:'Returned for TD', on:p.retTd, kind:'danger'});
     h+=flagHTML(fl);
-    if(!ours) h+=defPanelHTML();
+    if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
   else if(E.type==='punt' || E.type==='kickoff'){
     const isPunt = E.type==='punt';
@@ -1172,7 +1271,7 @@ function formHTML(g){
     else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'});
     h+=flagHTML(fl);
     h+=prev;
-    if(ours) h+=defPanelHTML();
+    if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
   else if(E.type==='fg'){
     if(ours) h+='<h3>Kicker</h3>'+chipsHTML('kicker', p.kicker);
@@ -1186,7 +1285,7 @@ function formHTML(g){
         <button data-fg="1" class="${p.fgGood?'on':''}">Good</button>
         <button data-fg="0" class="${!p.fgGood?'on':''}">No good</button></div>`;
     h+=flagHTML([{k:'blocked',label:'Blocked',on:p.blocked,kind:'danger'}]);
-    if(!ours) h+=defPanelHTML();
+    if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
     h+=prev;
   }
   else if(E.type==='pat'){
@@ -1210,7 +1309,7 @@ function formHTML(g){
         <button data-two="1" class="${p.twoPtGood?'on':''}">Good</button>
         <button data-two="0" class="${!p.twoPtGood?'on':''}">No good</button></div>`;
     }
-    if(!ours) h+=defPanelHTML();
+    if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
   else if(E.type==='penalty'){
     const on = p.penOn || 'us';
@@ -1234,6 +1333,11 @@ function formHTML(g){
         <input type="text" data-inp="note" value="${esc(p.note||'')}" placeholder="Timeout, injury, end of quarter…"></div>`;
   }
 
+  // somewhere to write down what the numbers can't say — "bad snap", "trick play"
+  if(E.type!=='note' && E.type!=='penalty'){
+    h+=`<div class="field" style="margin-top:12px"><label class="f">Note (optional)</label>
+        <input type="text" data-inp="note" value="${esc(p.note||'')}" placeholder="bad snap, trick play, injury…"></div>`;
+  }
   h+=`<div class="row" style="margin-top:14px">
       <button class="btn go grow" data-act="save">${UI.editingId?'Save changes':'Save play'}</button>
       ${UI.editingId?'<button class="btn bad sm" data-act="delete">Delete</button>':''}
@@ -1294,6 +1398,7 @@ function effectiveGain(p){
 /* ---------- saving ---------- */
 function commitPlay(){
   const g=game(); if(!g||!E) return;
+  if(g.status==='final' && !UI.editingId){ toast('This game is final — reopen it to add plays'); return; }
   const p=E.p;
   // normalise by type
   if(p.type==='pass'){
@@ -1324,26 +1429,39 @@ function commitPlay(){
     p.fd = !!p.autoFd && (p.penOn !== p.poss);
   }
 
-  if(UI.editingId){
+  // last line of defence: never save tags the play can't justify
+  if(p.def && p.def.length && !showsDefPanel(p.type==='sack'?'pass':p.type, p.poss)) p.def=[];
+  const wasEdit = !!UI.editingId;
+  if(wasEdit){
     const i=g.plays.findIndex(x=>x.id===UI.editingId);
     if(i>=0) g.plays[i]=p;
     UI.editingId=null;
   } else {
     p.sitBefore = {q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot};
-    g.plays.push(p);
-    g.sit = nextSit(g.sit, p);
-    p.sitAfter = Object.assign({},g.sit);
+    if(UI.insertAt!=null && UI.insertAt>=0 && UI.insertAt<=g.plays.length){
+      // slotting a missed play into the middle — leave the live situation alone
+      g.plays.splice(UI.insertAt, 0, p);
+      UI.insertAt = null;
+    } else {
+      g.plays.push(p);
+      g.sit = nextSit(g.sit, p);
+      p.sitAfter = Object.assign({},g.sit);
+    }
   }
   // remember frequently used players
   remember('rusher',p.rusher); remember('passer',p.passer); remember('receiver',p.receiver);
   remember('punter',p.punter); remember('kicker',p.kicker); remember('returner',p.returner);
 
   g.updatedAt=nowISO(); save();
-  const scored = p.td || (p.type==='fg'&&p.fgGood) || p.safety;
   E=null;
   render();
-  if(p.td){ startEntry('pat'); E.p.poss = p.scoreBy; E.p.patKind='kick'; E.p.patGood=true; renderEntry(); toast('Touchdown — log the extra point'); }
-  else toast('Play saved');
+  // only chase the extra point on a newly logged touchdown — correcting an old
+  // one shouldn't ask again, and a final game isn't taking new plays at all
+  if(p.td && !wasEdit && g.status!=='final'){
+    startEntry('pat'); E.p.poss = p.scoreBy; E.p.patKind='kick'; E.p.patGood=true;
+    renderEntry(); toast('Touchdown — log the extra point');
+  }
+  else toast(wasEdit ? 'Play updated' : 'Play saved');
 }
 
 /* work out the next down/distance/possession after a play */
@@ -1521,6 +1639,7 @@ function playHTML(p,i){
   if(p.td||(p.type==='fg'&&p.fgGood)) cls.push('score');
   if(p.int||p.fumLost) cls.push('turn');
   const sub = [qLabel(p.q), sitText({down:p.down,dist:p.dist,spot:p.spot,poss:p.poss}), 'at '+spotLabel(p.spot)];
+  if(p.note && p.type!=='penalty' && p.type!=='note') sub.push('“'+p.note+'”');
   const d=defSummary(p);
   return `<div class="${cls.join(' ')}" data-play="${esc(p.id)}">
       <div class="pq">${qLabel(p.q)}<br>#${i+1}</div>
@@ -1698,7 +1817,8 @@ function renderGameList(){
     const res = st.score.usTotal>st.score.themTotal?'W':(st.score.usTotal<st.score.themTotal?'L':'T');
     return `<div class="spread" style="padding:9px 0; border-bottom:1px solid var(--line)">
       <div><b>${esc(g.date)}</b> ${g.homeAway==='home'?'vs':'at'} ${esc(g.opponent)}
-        ${on?'<span class="pill on">active</span>':''}
+        ${g.status==='final'?'<span class="pill" style="background:var(--ink); color:#fff">final</span>'
+          : (on?'<span class="pill on">active</span>':'')}
         <div class="tiny muted">${res} ${st.score.usTotal}&ndash;${st.score.themTotal} · ${g.plays.length} plays</div></div>
       <div class="row tight">
         ${on?'':`<button class="btn xs p" data-gact="use" data-gid="${g.id}">Open</button>`}
@@ -1779,13 +1899,27 @@ function wire(){
   $('#btnUndo').onclick=undoLast;
   $('#btnQtr').onclick=()=>{ const g=game(); if(!g) return; g.sit.q = g.sit.q>=5?1:g.sit.q+1; save(); render(); };
   $('#btnEditSit').onclick=openSituation;
+  $('#btnFinish').onclick=finishGame;
   $('#btnAllPlays').onclick=()=>switchView('plays');
   $('#btnNewGame').onclick=()=>gameForm(null);
   $('#btnNewGameQuick').onclick=()=>gameForm(null);
   $('#btnGoRoster').onclick=()=>switchView('setup');
   $('#btnAddPlayer').onclick=()=>playerForm(null);
   $('#btnPasteRoster').onclick=pasteRoster;
-  $('#btnAddManual').onclick=()=>{ switchView('game'); };
+  const finalBlock = ()=>{ const g=game();
+    if(g && g.status==='final'){ toast('This game is final — reopen it to add plays'); return true; }
+    return false; };
+  $('#btnAddManual').onclick=()=>{ if(finalBlock()) return; UI.insertAt=null; switchView('game'); };
+  const playAt = ()=>{
+    const g=game(); if(!g) return null;
+    const n=parseInt($('#playNum').value,10);
+    if(!n || n<1 || n>g.plays.length){ toast(`Enter a play number between 1 and ${g.plays.length}`); return null; }
+    return n;
+  };
+  $('#btnGoPlay').onclick=()=>{ const n=playAt(); if(n) editPlay(game().plays[n-1].id); };
+  $('#btnInsertPlay').onclick=()=>{ if(finalBlock()) return; const n=playAt(); if(!n) return;
+    UI.insertAt=n-1; UI.editingId=null; E=null;
+    switchView('game'); toast('Pick the play type — it will slot in at #'+n); };
   $('#devName').oninput=e=>{ DB.deviceName=e.target.value; save(); };
   $('#teamName').oninput=e=>{ DB.team.name=e.target.value; save(); renderTop(); };
   $('#btnPrintSeason').onclick=()=>window.print();
@@ -1798,7 +1932,12 @@ function wire(){
   $('#seasonSide').onclick=e=>{ const b=e.target.closest('button'); if(!b) return;
     UI.seasonSide=b.dataset.s; $$('#seasonSide button').forEach(x=>x.classList.toggle('on',x===b)); renderSeason(); };
   $('#possSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return;
-    const g=game(); if(!g) return; g.sit.poss=b.dataset.poss; save(); render(); };
+    const g=game(); if(!g) return;
+    // mid-entry this should change the play you're working on, not just the game state
+    if(E && UI.editingId) return switchPoss(b.dataset.poss);
+    g.sit.poss=b.dataset.poss;
+    if(E) switchPoss(b.dataset.poss);
+    save(); render(); };
 
   $('#view-plays').addEventListener('click', e=>{
     const n=e.target.closest('[data-play]'); if(n) editPlay(n.dataset.play); });
@@ -1870,6 +2009,46 @@ async function forceUpdate(){
   setTimeout(()=>location.reload(true), 400);
 }
 
+/* End-of-game checklist. The order matters: merge the backup scorer first so
+   every number downstream is complete, then read the sheet, then back up. */
+function finishGame(){
+  const g=game(); if(!g) return;
+  if(g.status==='final'){ toast('This game is already final'); return; }
+  const s=computeStats(g);
+  openModal('Finish this game?', `
+    <div class="card" style="text-align:center">
+      <h2 style="margin:2px 0 2px; font-size:1.4rem">${esc(usName())} ${s.score.usTotal} &ndash; ${s.score.themTotal} ${esc(themName())}</h2>
+      <p class="small muted" style="margin:0">${g.plays.length} ${plural(g.plays.length,'play')} recorded</p>
+    </div>
+    <div class="card">
+      <h3>Before you close it out</h3>
+      <div class="row" style="margin-bottom:8px"><span class="pill">1</span>
+        <span class="grow small">Read the MaxPreps entry sheet</span>
+        <button class="btn sm" id="fRep">Open</button></div>
+      <div class="row"><span class="pill">2</span>
+        <span class="grow small">Back up — this is the only copy</span>
+        <button class="btn sm" id="fBack">Back up</button></div>
+    </div>
+    <div class="card">
+      <p class="small muted" style="margin:0 0 8px">Marking it final stops new plays going into this game. You can reopen it any time.</p>
+      <button class="btn go wide" id="fDone">Mark game final</button>
+    </div>`, body=>{
+      $('#fRep',body).onclick=()=>{ closeModal(); switchView('reports'); runReport('maxpreps'); };
+      $('#fBack',body).onclick=()=>{ download('football-stats-backup-'+todayStr()+'.json',
+        JSON.stringify(Object.assign({kind:'vfstats.full'},DB),null,1)); toast('Backup saved'); };
+      $('#fDone',body).onclick=()=>{
+        g.status='final'; g.finishedAt=nowISO(); g.updatedAt=nowISO();
+        E=null; UI.editingId=null; saveNow(); closeModal(); render();
+        toast('Game marked final');
+      };
+    });
+}
+function reopenGame(){
+  const g=game(); if(!g) return;
+  delete g.status; delete g.finishedAt; g.updatedAt=nowISO();
+  save(); render(); toast('Game reopened');
+}
+
 function confirmBox(msg, cb){
   openModal('Are you sure?', `<div class="card"><p>${esc(msg)}</p>
     <div class="row"><button class="btn bad grow" id="cYes">Yes, do it</button>
@@ -1882,6 +2061,13 @@ function confirmBox(msg, cb){
 function onEntryClick(e){
   const g=game(); if(!g) return;
   const t=e.target;
+  const fin=t.closest('[data-fin]');
+  if(fin){
+    if(fin.dataset.fin==='reopen') return reopenGame();
+    if(fin.dataset.fin==='reports'){ switchView('reports'); return runReport('maxpreps'); }
+    if(fin.dataset.fin==='backup'){ download('football-stats-backup-'+todayStr()+'.json',
+      JSON.stringify(Object.assign({kind:'vfstats.full'},DB),null,1)); return toast('Backup saved'); }
+  }
   const start=t.closest('[data-start]');
   if(start){ startEntry(start.dataset.start); return; }
   if(t.closest('#btnFlipPoss')){ g.sit=flipPoss(g.sit,g.sit.spot); save(); render(); return; }
@@ -1899,6 +2085,8 @@ function onEntryClick(e){
     if(act.dataset.act==='save')   return commitPlay();
     if(act.dataset.act==='delete') return deleteEditing();
   }
+  const ep=t.closest('[data-eposs]'); if(ep) return switchPoss(ep.dataset.eposs);
+  const et=t.closest('[data-etype]'); if(et) return switchType(et.dataset.etype);
   const pick=t.closest('[data-pick]');
   if(pick){
     const role=pick.dataset.pick, num=pick.dataset.num;
