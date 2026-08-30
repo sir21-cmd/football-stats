@@ -263,9 +263,19 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
   table{font-size:9.5pt; width:100%}
   table.wide{font-size:7.4pt}
   table.wide th, table.wide td{padding:2px 2px; letter-spacing:-.01em}
-  /* long names would otherwise hold the whole table open */
-  th:nth-child(2), td:nth-child(2){white-space:normal; word-break:break-word}
-  table.wide th:nth-child(2), table.wide td:nth-child(2){max-width:92px}
+  /* Headers must be allowed to wrap: a dozen labels like "TD RECEPTION" held
+     on one line each will squeeze the name column to nothing, and then the
+     names themselves break one letter per line. */
+  th{white-space:normal; word-break:normal; overflow-wrap:break-word; hyphens:none}
+  /* long names wrap between words, but the column can never collapse */
+  th:nth-child(2), td:nth-child(2){white-space:normal; word-break:normal;
+    overflow-wrap:break-word; min-width:78px}
+  /* Wide tables get fixed column widths rather than letting each browser's
+     table algorithm decide. Safari was starving the name column to a single
+     character; a fixed share can't be starved by anything. */
+  table.wide{table-layout:fixed}
+  table.wide th:first-child, table.wide td:first-child{width:5%}
+  table.wide th:nth-child(2), table.wide td:nth-child(2){width:17%; min-width:0; max-width:none}
   th,td{padding:3px 5px; border-bottom:1px solid #bbb}
   th{background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   .statgrp{break-inside:avoid; page-break-inside:avoid}
@@ -498,7 +508,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-30';
+const APP_VERSION = '2026.08.30-31';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2473,9 +2483,11 @@ function maxprepsHTML(g,s,opts){
         ['Inside 20 Yards',r=>r.in20]], s.punts);
   h+=sec('Kickoffs', [['Total Kickoffs',r=>r.no],['Total Kickoff Yards',r=>r.yds],['Longest Kickoff',r=>r.long],
         ['Touch Backs',r=>r.tb]], s.kickoffs);
-  h+=sec('Scoring summary', [['TD Run',r=>r.tdRun],['TD Reception',r=>r.tdRec],['TD Misc',r=>r.tdMisc],
-        ['PAT Made',r=>r.patMade],['PAT Att',r=>r.patAtt],['Conv Runs',r=>r.convRun],['Conv Rec',r=>r.convRec],
-        ['Conv Def Ret',r=>r.convDef],['FG Made',r=>r.fgMade],['FG Att',r=>r.fgAtt],['FG Longest',r=>r.fgLong],
+  // short labels: twelve columns on Letter can't hold long words without
+  // breaking them mid-word
+  h+=sec('Scoring summary', [['TD Run',r=>r.tdRun],['TD Rec',r=>r.tdRec],['TD Misc',r=>r.tdMisc],
+        ['PAT Made',r=>r.patMade],['PAT Att',r=>r.patAtt],['Conv Run',r=>r.convRun],['Conv Rec',r=>r.convRec],
+        ['Conv Def',r=>r.convDef],['FG Made',r=>r.fgMade],['FG Att',r=>r.fgAtt],['FG Long',r=>r.fgLong],
         ['Safety',r=>r.saf]], s.scoring);
   if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div>`;
   h+='</div>';
