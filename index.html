@@ -507,7 +507,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-33';
+const APP_VERSION = '2026.08.30-34';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -652,6 +652,9 @@ function playPoints(p){
   if(p.type==='pat'){ if(p.patGood) add(scorer,1); if(p.twoPtGood) add(scorer,2); }
   else { if(p.twoPtGood) add(scorer,2); }
   if(p.type==='fg' && p.fgGood) add(scorer,3);
+  // a defensive score counts on the board too, so the scoring summary's points
+  // column can never drift from the scoreboard
+  if(p.defTd && !p.td) add(p.defTdBy!=null ? (p.poss==='us'?'them':'us') : scorer, 6);
   if(p.safety) add(p.safetyBy || (p.poss==='us'?'them':'us'), 2);
   return out;
 }
@@ -838,9 +841,16 @@ function computeStats(g){
   T.scrimPlays    = T.rushAtt + T.passAtt;
   T.oppScrimPlays = T.oppRushAtt + T.oppPassAtt;
   const fix = m => rows(m).map(r=>{ if(r.long===-99) r.long=0; return r; });
+  /* Every way a player can put points on the board, added up. The TEAM row of
+     the scoring summary should equal our final score — if it doesn't, a play
+     was tagged to the wrong man. */
+  const scorePts = r =>
+      ((r.tdRun||0)+(r.tdRec||0)+(r.tdMisc||0))*6 + (r.patMade||0)
+    + ((r.convRun||0)+(r.convRec||0)+(r.convDef||0))*2
+    + (r.fgMade||0)*3 + (r.saf||0)*2;
   return {
     rushing:fix(S.rushing), passing:fix(S.passing), receiving:fix(S.receiving),
-    defense:rows(S.defense), scoring:rows(S.scoring),
+    defense:rows(S.defense), scoring:rows(S.scoring).map(r=>{ r.pts=scorePts(r); return r; }),
     puntRet:fix(S.puntRet), koRet:fix(S.koRet), punts:rows(S.punts),
     kickoffs:rows(S.kickoffs), kicking:rows(S.kicking),
     team:T, score:S.score
@@ -2356,16 +2366,19 @@ const C_NUM = {k:'num', l:'#'};
 const C_NAME= {k:'name', l:'Player', f:r=>r.name||('#'+r.num)};
 const avg = (y,a)=> a? (y/a).toFixed(1) : '0.0';
 const SUM = (rows,k)=> rows.reduce((n,r)=>n+(r[k]||0),0);
+/* A team's longest run is its longest, not the sum of everybody's longest. */
+const MAX = (rows,k)=> rows.reduce((n,r)=>Math.max(n, r[k]||0), 0);
+const LONGTF = k => (t,rows)=> MAX(rows,k);
 /* MaxPreps folds return/loss yardage into the cell: 2 sacks for 14 reads "2 (14)" */
 const fold = (n,y)=> (y? n+' ('+y+')' : String(n||0));
 
 const COLS = {
   rush:[C_NUM,C_NAME,{k:'att',l:'Att',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.att),tf:t=>avg(t.yds,t.att)},
-        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
+        {k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
   pass:[C_NUM,C_NAME,{k:'comp',l:'Comp',sum:1},{k:'att',l:'Att',sum:1},{k:'pct',l:'Pct',f:r=>r.att?Math.round(r.comp/r.att*100)+'%':'—',tf:t=>t.att?Math.round(t.comp/t.att*100)+'%':'—'},
-        {k:'yds',l:'Yds',sum:1},{k:'td',l:'TD',sum:1},{k:'int',l:'Int',sum:1},{k:'long',l:'Long',sum:1},{k:'fum',l:'Fum',sum:1,opt:1}],
+        {k:'yds',l:'Yds',sum:1},{k:'td',l:'TD',sum:1},{k:'int',l:'Int',sum:1},{k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'fum',l:'Fum',sum:1,opt:1}],
   rec:[C_NUM,C_NAME,{k:'rec',l:'Rec',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.rec),tf:t=>avg(t.yds,t.rec)},
-       {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
+       {k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
   // the nine that print every week — the same eight codes the tagging panel puts
   // on its front row, plus the derived total. Yardage folds into its own stat.
   def:[C_NUM,C_NAME,{k:'t',l:'Solo',sum:1},{k:'a',l:'Ast',sum:1},{k:'tot',l:'Tot',sum:1},{k:'tfl',l:'TFL',sum:1},
@@ -2377,16 +2390,16 @@ const COLS = {
        {k:'hur',l:'Hur',sum:1,opt:1},{k:'bk',l:'Blk',sum:1,opt:1},{k:'bpt',l:'BPt',sum:1,opt:1},
        {k:'saf',l:'Saf',sum:1,opt:1},{k:'td',l:'TD',sum:1,opt:1}],
   ret:[C_NUM,C_NAME,{k:'ret',l:'Ret',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.ret),tf:t=>avg(t.yds,t.ret)},
-       {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1,opt:1},{k:'fc',l:'FC',sum:1,opt:1}],
+       {k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'td',l:'TD',sum:1,opt:1},{k:'fc',l:'FC',sum:1,opt:1}],
   punt:[C_NUM,C_NAME,{k:'no',l:'Punts',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no),tf:t=>avg(t.yds,t.no)},
-        {k:'long',l:'Long',sum:1},{k:'in20',l:'In 20',sum:1},{k:'blk',l:'Blkd',sum:1,opt:1}],
+        {k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'in20',l:'In 20',sum:1},{k:'blk',l:'Blkd',sum:1,opt:1}],
   ko:[C_NUM,C_NAME,{k:'no',l:'KO',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no),tf:t=>avg(t.yds,t.no)},
-      {k:'long',l:'Long',sum:1},{k:'tb',l:'TB',sum:1}],
-  kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga,tf:(t,rows)=>SUM(rows,'fgm')+'/'+SUM(rows,'fga')},{k:'fgLong',l:'Long',sum:1},
+      {k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'tb',l:'TB',sum:1}],
+  kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga,tf:(t,rows)=>SUM(rows,'fgm')+'/'+SUM(rows,'fga')},{k:'fgLong',l:'Long',sum:1,tf:LONGTF('fgLong')},
         {k:'patm',l:'PAT',f:r=>r.patm+'/'+r.pata,tf:(t,rows)=>SUM(rows,'patm')+'/'+SUM(rows,'pata')}],
   score:[C_NUM,C_NAME,{k:'tdRun',l:'TD Run',sum:1},{k:'tdRec',l:'TD Rec',sum:1},{k:'tdMisc',l:'TD Misc',sum:1},
-         {k:'patMade',l:'PAT',f:r=>r.patMade+'/'+r.patAtt},{k:'convRun',l:'2pt Run',sum:1},{k:'convRec',l:'2pt Rec',sum:1},{k:'convDef',l:'2pt Def',sum:1,opt:1},
-         {k:'fgMade',l:'FG',f:r=>r.fgMade+'/'+r.fgAtt},{k:'fgLong',l:'FG Lg',sum:1},{k:'saf',l:'Saf',sum:1}]
+         {k:'patMade',l:'PAT',f:r=>r.patMade+'/'+r.patAtt,tf:(t,rows)=>SUM(rows,'patMade')+'/'+SUM(rows,'patAtt')},{k:'convRun',l:'2pt Run',sum:1},{k:'convRec',l:'2pt Rec',sum:1},{k:'convDef',l:'2pt Def',sum:1,opt:1},
+         {k:'fgMade',l:'FG',f:r=>r.fgMade+'/'+r.fgAtt,tf:(t,rows)=>SUM(rows,'fgMade')+'/'+SUM(rows,'fgAtt')},{k:'fgLong',l:'FG Lg',sum:1,tf:LONGTF('fgLong')},{k:'saf',l:'Saf',sum:1},{k:'pts',l:'Pts',sum:1}]
 };
 function grp(title, html){ return `<div class="statgrp"><h3>${esc(title)}</h3>${html}</div>`; }
 
@@ -2443,7 +2456,7 @@ function teamHTML(g,s,opts){
     ${line('Sacks', t.sacksBy+' by us', t.sacksAllowed+' by them')}
     </tbody></table></div></div>`;
   if(opts.scoringSummary!==false)
-    h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet', total:false})}</div>`;
+    h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet'})}</div>`;
   if(opts.scoringPlays!==false){
     const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
     if(sc.length) h+=`<div class="statgrp"><h3>Scoring plays</h3><div class="plays">`+
@@ -2504,7 +2517,7 @@ function gameReportHTML(g,s,opts){
   h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, P));
   h+=grp('Place kicking', T(COLS.kick, s.kicking, P));
   // the one section the MaxPreps sheet used to carry on its own
-  h+=grp('Scoring summary', T(COLS.score, s.scoring, {empty:'No scoring', hideEmpty:true, total:false}));
+  h+=grp('Scoring summary', T(COLS.score, s.scoring, {empty:'No scoring', hideEmpty:true}));
   if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px">
     <button class="btn p" onclick="window.print()">Print / save as PDF</button>
     <span class="small muted">One document: send it to the coaches and key MaxPreps from the same page.</span></div>`;
@@ -2597,7 +2610,7 @@ function renderSeason(){
     h+=grp('Punting', T(withGP(COLS.punt), s.punts, {empty:'None', hideEmpty:true}));
     h+=grp('Kickoffs', T(withGP(COLS.ko), s.kickoffs, {empty:'None', hideEmpty:true}));
     h+=grp('Place kicking', T(withGP(COLS.kick), s.kicking, {empty:'None', hideEmpty:true}));
-    h+=grp('Scoring', T(withGP(COLS.score), s.scoring, {empty:'None', total:false}));
+    h+=grp('Scoring', T(withGP(COLS.score), s.scoring, {empty:'None', hideEmpty:true}));
   }
   if(UI.seasonSide==='games'){
     let w=0,l=0,tt=0;
