@@ -483,7 +483,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-28';
+const APP_VERSION = '2026.08.30-29';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1472,6 +1472,16 @@ function commitPlay(){
     const i=g.plays.findIndex(x=>x.id===UI.editingId);
     if(i>=0) g.plays[i]=p;
     UI.editingId=null;
+    // Correcting the most recent play has to move the ball with it — otherwise
+    // a 5-yard run fixed to 6 leaves you on 2nd & 5 instead of 2nd & 4.
+    // Earlier plays are left alone: everything after them was recorded live
+    // from the real field position, which beats anything we could recompute.
+    if(i === g.plays.length-1){
+      const before = p.sitBefore || {q:p.q, poss:p.poss, down:p.down, dist:p.dist, spot:p.spot};
+      p.sitBefore = Object.assign({}, before);
+      g.sit = nextSit(Object.assign({}, before), p);
+      p.sitAfter = Object.assign({}, g.sit);
+    }
   } else {
     p.sitBefore = {q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot};
     if(UI.insertAt!=null && UI.insertAt>=0 && UI.insertAt<=g.plays.length){
