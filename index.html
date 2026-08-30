@@ -252,6 +252,12 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
   body{background:#fff}
   main{padding:0; max-width:none}
   .card,.sheet{box-shadow:none; border:0; padding:0; margin:0 0 10px}
+  /* Sticky headers are for scrolling; on paper they get pinned to the page
+     origin, which drops them below the rows and can hide a one-row table
+     entirely. Anchor them normally and repeat them across page breaks. */
+  th{position:static !important; top:auto !important}
+  thead{display:table-header-group}
+  tr{break-inside:avoid; page-break-inside:avoid}
   /* paper can't scroll sideways — make sure nothing is silently cut off */
   .tblwrap{overflow:visible !important}
   table{font-size:9.5pt; width:100%}
@@ -477,7 +483,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.21-25';
+const APP_VERSION = '2026.08.30-26';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
