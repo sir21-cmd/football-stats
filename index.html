@@ -324,6 +324,8 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
         <div id="fieldStrip"></div>
       </div>
 
+      <div id="qNudge"></div>
+
       <div class="card" id="entryCard">
         <div id="entry"></div>
       </div>
@@ -357,6 +359,19 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
         <button class="btn sm ghost" id="btnInsertPlay">Insert before it</button>
       </div>
       <p class="tiny muted" style="margin:6px 0 0">Open it to change or replace that play. Insert before it to slot in a play you missed.</p>
+      <hr>
+      <div class="row tight">
+        <label class="f" style="margin:0 2px 0 0">Set quarter · plays</label>
+        <input type="number" id="qFrom" min="1" placeholder="23" style="width:78px; min-height:38px">
+        <span class="small muted">to</span>
+        <input type="number" id="qTo" min="1" placeholder="41" style="width:78px; min-height:38px">
+        <select id="qTarget" style="width:auto; min-height:38px">
+          <option value="1">Q1</option><option value="2">Q2</option>
+          <option value="3">Q3</option><option value="4">Q4</option><option value="5">OT</option>
+        </select>
+        <button class="btn sm p" id="btnSetQtr">Apply</button>
+      </div>
+      <p class="tiny muted" style="margin:6px 0 0">Forgot to change quarters? Move a whole range of plays at once. Only the score-by-quarter line and the log grouping change — no stat totals are affected.</p>
     </div>
     <div class="plays" id="allPlays"></div>
   </section>
@@ -483,7 +498,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-29';
+const APP_VERSION = '2026.08.30-30';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -821,7 +836,7 @@ function totalRow(list, keys){
    ========================================================================= */
 const UI = { view:'game', statSide:'off', seasonSide:'off', playFilter:'all',
              defStat:'T', recent:{}, editingId:null, insertAt:null,
-             showAll:{}, defMore:false, defLegend:false };
+             showAll:{}, defMore:false, defLegend:false, qNudgeFor:null };
 let E = null;   // current entry draft
 
 const QUICK_YDS = [-10,-5,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,35,40,50,60];
@@ -921,6 +936,57 @@ function renderFieldStrip(){
      <span class="grow"></span>
      <button class="btn xs ghost" id="btnFlipField" title="Match the field you're looking at">&#8646; Flip sides</button>
      </div>`;
+}
+
+/* ---------- quarters ---------- */
+/* End of quarter: log a marker, move to the next one, and the field swaps ends
+   on its own because the orientation follows the quarter. */
+function endQuarter(){
+  const g=game(); if(!g) return;
+  if(g.status==='final'){ toast('This game is final — reopen it first'); return; }
+  const from = g.sit.q || 1;
+  if(from >= 8){ toast('Already in overtime'); return; }
+  const before = {q:from, poss:g.sit.poss, down:g.sit.down, dist:g.sit.dist, spot:g.sit.spot};
+  g.plays.push({ id:DB.deviceId+'-'+uid(), dev:DB.deviceId, t:nowISO(), type:'note',
+    q:from, poss:g.sit.poss, down:g.sit.down, dist:g.sit.dist, spot:g.sit.spot,
+    def:[], note:'End of '+qLabel(from), quarterEnd:true,
+    sitBefore:before, sitAfter:Object.assign({}, before, {q:from+1}) });
+  g.sit.q = from+1;
+  UI.qNudgeFor = null;
+  g.updatedAt = nowISO(); save(); render();
+  toast(qLabel(g.sit.q)+' — ends change, '+usName()+' now defend the '+(fieldFlipped()?'right':'left'));
+}
+/* A quarter that has run long is usually a quarter nobody advanced. */
+function quarterNudge(g){
+  const q = g.sit.q || 1;
+  if(g.status==='final' || UI.qNudgeFor===q) return '';
+  const inQ = g.plays.filter(p=>(p.q||1)===q);
+  if(inQ.length < 30) {
+    // not enough plays yet — but a long wall-clock quarter counts too
+    const first = inQ.find(p=>p.t);
+    const mins = first ? Math.round((Date.now()-new Date(first.t).getTime())/60000) : 0;
+    if(mins < 28 || inQ.length < 12) return '';
+    return nudgeHTML(q, inQ.length, mins);
+  }
+  const first = inQ.find(p=>p.t);
+  const mins = first ? Math.round((Date.now()-new Date(first.t).getTime())/60000) : 0;
+  return nudgeHTML(q, inQ.length, mins);
+}
+function nudgeHTML(q, plays, mins){
+  return `<div class="card" style="border-left:4px solid var(--warn)">
+    <div class="spread">
+      <div><b>Still in ${qLabel(q)}?</b>
+        <div class="tiny muted">${plays} ${plural(plays,'play')} logged${mins?' · '+mins+' minutes':''} — a quarter is usually about 30.</div></div>
+      <div class="row tight">
+        <button class="btn sm p" data-endq="1">End of ${qLabel(q)}</button>
+        <button class="btn sm ghost" data-qdismiss="${q}">Yes, still ${qLabel(q)}</button>
+      </div>
+    </div></div>`;
+}
+function renderQuarterNudge(){
+  const box=$('#qNudge'); if(!box) return;
+  const g=game();
+  box.innerHTML = g ? quarterNudge(g) : '';
 }
 
 /* ---------- roster chip helpers ---------- */
@@ -1220,6 +1286,7 @@ function menuHTML(g){
   h+=`<div class="row" style="margin-top:10px">
       <button class="btn sm ghost" data-start="pat">Extra point / 2&#8209;pt</button>
       <button class="btn sm ghost" data-start="note">Note / timeout</button>
+      <button class="btn sm ghost" data-endq="1">End of ${qLabel(g.sit.q)}</button>
       <span class="grow"></span>
       <button class="btn sm ghost" id="btnFlipPoss">Change of possession</button>
     </div>`;
@@ -1630,7 +1697,7 @@ function switchView(v){
 }
 function render(){
   renderTop();
-  if(UI.view==='game'){ renderEntry(); renderRecent(); }
+  if(UI.view==='game'){ renderEntry(); renderQuarterNudge(); renderRecent(); }
   if(UI.view==='plays') renderPlayList();
   if(UI.view==='stats') renderStats();
   if(UI.view==='season') renderSeason();
@@ -1969,6 +2036,27 @@ function wire(){
     if(!n || n<1 || n>g.plays.length){ toast(`Enter a play number between 1 and ${g.plays.length}`); return null; }
     return n;
   };
+  $('#qNudge').addEventListener('click', e=>{
+    if(e.target.closest('[data-endq]')) return endQuarter();
+    const d=e.target.closest('[data-qdismiss]');
+    if(d){ UI.qNudgeFor=parseInt(d.dataset.qdismiss,10); renderQuarterNudge(); }
+  });
+  $('#btnSetQtr').onclick=()=>{
+    const g=game(); if(!g||!g.plays.length){ toast('No plays to move'); return; }
+    const a=parseInt($('#qFrom').value,10), b=parseInt($('#qTo').value,10);
+    const q=parseInt($('#qTarget').value,10);
+    if(!a||!b||a<1||b<a||b>g.plays.length){ toast(`Enter a range between 1 and ${g.plays.length}`); return; }
+    let n=0;
+    for(let i=a-1;i<b;i++){
+      const p=g.plays[i];
+      p.q=q;
+      if(p.sitBefore) p.sitBefore.q=q;
+      if(p.sitAfter) p.sitAfter.q=q;
+      n++;
+    }
+    g.updatedAt=nowISO(); save(); render();
+    toast(n+' '+plural(n,'play')+' moved to '+qLabel(q));
+  };
   $('#btnGoPlay').onclick=()=>{ const n=playAt(); if(n) editPlay(game().plays[n-1].id); };
   $('#btnInsertPlay').onclick=()=>{ if(finalBlock()) return; const n=playAt(); if(!n) return;
     UI.insertAt=n-1; UI.editingId=null; E=null;
@@ -2114,6 +2202,7 @@ function confirmBox(msg, cb){
 function onEntryClick(e){
   const g=game(); if(!g) return;
   const t=e.target;
+  if(t.closest('[data-endq]')) return endQuarter();
   const fin=t.closest('[data-fin]');
   if(fin){
     if(fin.dataset.fin==='reopen') return reopenGame();
