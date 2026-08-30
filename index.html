@@ -190,6 +190,7 @@ th:nth-child(2),td:nth-child(2){text-align:left}
 tbody tr:nth-child(even){background:#fbfcfe}
 td.num{font-variant-numeric:tabular-nums}
 tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
+tr.keyrow td{font-weight:800; background:#f8fafc}
 .statgrp{margin-bottom:16px}
 .statgrp h3{margin-bottom:4px}
 
@@ -508,7 +509,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-31';
+const APP_VERSION = '2026.08.30-32';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -667,6 +668,7 @@ function computeStats(g){
     team:{ firstDowns:0, penYds:0, penCount:0, rushAtt:0, rushYds:0, passComp:0, passAtt:0,
            passYds:0, passInt:0, sacksAllowed:0, fumbles:0, fumblesLost:0, turnovers:0, plays:0,
            tdTotal:0, oppFirstDowns:0, oppPenYds:0, oppRushYds:0, oppPassYds:0, oppTurnovers:0,
+           oppRushAtt:0, oppPassAtt:0, oppPassComp:0, sacksBy:0,
            takeaways:0, thirdConv:0, thirdAtt:0, fourthConv:0, fourthAtt:0 },
     score:{ us:[0,0,0,0,0], them:[0,0,0,0,0], usTotal:0, themTotal:0 },
     drives:[]
@@ -778,8 +780,17 @@ function computeStats(g){
     }
     /* ---- their offense: yards against + our returns ---- */
     else {
-      if(p.type==='run') T.oppRushYds += (p.yds||0);
-      if(p.type==='pass' && p.comp) T.oppPassYds += (p.yds||0);
+      // mirror our own bookkeeping so the opponent column can carry averages too
+      if(p.type==='run'){ T.oppRushAtt++; T.oppRushYds += (p.yds||0); }
+      if(p.type==='pass'){
+        T.oppPassAtt++;
+        if(p.comp){ T.oppPassComp++; T.oppPassYds += (p.yds||0); }
+      }
+      if(p.type==='sack'){
+        T.sacksBy++;
+        if(sackAsRush()){ T.oppRushAtt++; T.oppRushYds += (p.yds||0); }
+        else T.oppPassYds += (p.yds||0);
+      }
       if(p.int || p.fumLost) T.takeaways++;
       if(p.type==='punt'){
         if(p.returner!=null && p.returner!==''){
@@ -825,6 +836,9 @@ function computeStats(g){
 
   T.totalYards = T.rushYds + T.passYds;
   T.oppTotalYards = T.oppRushYds + T.oppPassYds;
+  // "plays" for an average means plays from scrimmage: rushes plus pass attempts
+  T.scrimPlays    = T.rushAtt + T.passAtt;
+  T.oppScrimPlays = T.oppRushAtt + T.oppPassAtt;
   const fix = m => rows(m).map(r=>{ if(r.long===-99) r.long=0; return r; });
   return {
     rushing:fix(S.rushing), passing:fix(S.passing), receiving:fix(S.receiving),
@@ -2331,7 +2345,10 @@ function T(cols, rows, opts){
     foot='<tfoot><tr>'+cols.map((c,i)=>{
       if(i===0) return '<td></td>';
       if(i===1) return '<td>TEAM</td>';
-      if(c.sum) return `<td class="num">${c.tf? c.tf(t) : t[c.k]}</td>`;
+      // computed columns (averages, percentages) need their own total, worked
+      // out from the summed totals rather than left blank
+      if(c.tf)  return `<td class="num">${c.tf(t, rows)}</td>`;
+      if(c.sum) return `<td class="num">${t[c.k]}</td>`;
       return '<td></td>';
     }).join('')+'</tr></tfoot>';
   }
@@ -2340,26 +2357,27 @@ function T(cols, rows, opts){
 const C_NUM = {k:'num', l:'#'};
 const C_NAME= {k:'name', l:'Player', f:r=>r.name||('#'+r.num)};
 const avg = (y,a)=> a? (y/a).toFixed(1) : '0.0';
+const SUM = (rows,k)=> rows.reduce((n,r)=>n+(r[k]||0),0);
 
 const COLS = {
-  rush:[C_NUM,C_NAME,{k:'att',l:'Att',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.att)},
+  rush:[C_NUM,C_NAME,{k:'att',l:'Att',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.att),tf:t=>avg(t.yds,t.att)},
         {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
-  pass:[C_NUM,C_NAME,{k:'comp',l:'Comp',sum:1},{k:'att',l:'Att',sum:1},{k:'pct',l:'Pct',f:r=>r.att?Math.round(r.comp/r.att*100)+'%':'—'},
+  pass:[C_NUM,C_NAME,{k:'comp',l:'Comp',sum:1},{k:'att',l:'Att',sum:1},{k:'pct',l:'Pct',f:r=>r.att?Math.round(r.comp/r.att*100)+'%':'—',tf:t=>t.att?Math.round(t.comp/t.att*100)+'%':'—'},
         {k:'yds',l:'Yds',sum:1},{k:'td',l:'TD',sum:1},{k:'int',l:'Int',sum:1},{k:'long',l:'Long',sum:1},{k:'fum',l:'Fum',sum:1,opt:1}],
-  rec:[C_NUM,C_NAME,{k:'rec',l:'Rec',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.rec)},
+  rec:[C_NUM,C_NAME,{k:'rec',l:'Rec',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.rec),tf:t=>avg(t.yds,t.rec)},
        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
   def:[C_NUM,C_NAME,{k:'t',l:'Solo',sum:1},{k:'a',l:'Ast',sum:1},{k:'tot',l:'Tot',sum:1},{k:'tfl',l:'TFL',sum:1,opt:1},
        {k:'sk',l:'Sack',sum:1,opt:1},{k:'skYds',l:'SkYd',sum:1,opt:1},{k:'int',l:'Int',sum:1,opt:1},{k:'intYds',l:'IntYd',sum:1,opt:1},
        {k:'pd',l:'PD',sum:1,opt:1},{k:'fc',l:'FF',sum:1,opt:1},{k:'fr',l:'FR',sum:1,opt:1},{k:'frYds',l:'FRYd',sum:1,opt:1},
        {k:'hur',l:'Hur',sum:1,opt:1},{k:'bk',l:'Blk',sum:1,opt:1},{k:'bpt',l:'BPt',sum:1,opt:1},{k:'saf',l:'Saf',sum:1,opt:1},{k:'td',l:'TD',sum:1,opt:1}],
-  ret:[C_NUM,C_NAME,{k:'ret',l:'Ret',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.ret)},
+  ret:[C_NUM,C_NAME,{k:'ret',l:'Ret',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.ret),tf:t=>avg(t.yds,t.ret)},
        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1,opt:1},{k:'fc',l:'FC',sum:1,opt:1}],
-  punt:[C_NUM,C_NAME,{k:'no',l:'Punts',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no)},
+  punt:[C_NUM,C_NAME,{k:'no',l:'Punts',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no),tf:t=>avg(t.yds,t.no)},
         {k:'long',l:'Long',sum:1},{k:'in20',l:'In 20',sum:1},{k:'blk',l:'Blkd',sum:1,opt:1}],
-  ko:[C_NUM,C_NAME,{k:'no',l:'KO',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no)},
+  ko:[C_NUM,C_NAME,{k:'no',l:'KO',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no),tf:t=>avg(t.yds,t.no)},
       {k:'long',l:'Long',sum:1},{k:'tb',l:'TB',sum:1}],
-  kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga},{k:'fgLong',l:'Long',sum:1},
-        {k:'patm',l:'PAT',f:r=>r.patm+'/'+r.pata}],
+  kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga,tf:(t,rows)=>SUM(rows,'fgm')+'/'+SUM(rows,'fga')},{k:'fgLong',l:'Long',sum:1},
+        {k:'patm',l:'PAT',f:r=>r.patm+'/'+r.pata,tf:(t,rows)=>SUM(rows,'patm')+'/'+SUM(rows,'pata')}],
   score:[C_NUM,C_NAME,{k:'tdRun',l:'TD Run',sum:1},{k:'tdRec',l:'TD Rec',sum:1},{k:'tdMisc',l:'TD Misc',sum:1},
          {k:'patMade',l:'PAT',f:r=>r.patMade+'/'+r.patAtt},{k:'convRun',l:'2pt Run',sum:1},{k:'convRec',l:'2pt Rec',sum:1},
          {k:'fgMade',l:'FG',f:r=>r.fgMade+'/'+r.fgAtt},{k:'fgLong',l:'FG Lg',sum:1},{k:'saf',l:'Saf',sum:1}]
@@ -2391,7 +2409,9 @@ function renderStats(){
 function teamHTML(g,s,opts){
   opts = opts || {};
   const t=s.team;
-  const line=(l,a,b)=>`<tr><td>${esc(l)}</td><td class="num">${a}</td><td class="num">${b}</td></tr>`;
+  // `strong` marks the derived rows (the averages) rather than injecting markup
+  // into the label, which the escaper would print verbatim
+  const line=(l,a,b,strong)=>`<tr${strong?' class="keyrow"':''}><td>${esc(l)}</td><td class="num">${esc(String(a))}</td><td class="num">${esc(String(b))}</td></tr>`;
   let h=`<div class="statgrp"><h3>Score by quarter</h3><div class="tblwrap"><table>
     <thead><tr><th>Team</th><th>1</th><th>2</th><th>3</th><th>4</th><th>OT</th><th>Final</th></tr></thead><tbody>
     <tr><td>${esc(usName())}</td>${s.score.us.map(v=>`<td class="num">${v}</td>`).join('')}<td class="num"><b>${s.score.usTotal}</b></td></tr>
@@ -2400,15 +2420,21 @@ function teamHTML(g,s,opts){
   h+=`<div class="statgrp"><h3>Team totals</h3><div class="tblwrap"><table>
     <thead><tr><th></th><th>${esc(usName())}</th><th>${esc(themName())}</th></tr></thead><tbody>
     ${line('First downs', t.firstDowns, t.oppFirstDowns)}
+    ${line('Rushes', t.rushAtt, t.oppRushAtt)}
     ${line('Rushing yards', t.rushYds, t.oppRushYds)}
+    ${line('Yards per rush', avg(t.rushYds,t.rushAtt), avg(t.oppRushYds,t.oppRushAtt), 1)}
+    ${line('Passing', t.passComp+'/'+t.passAtt, t.oppPassComp+'/'+t.oppPassAtt)}
     ${line('Passing yards', t.passYds, t.oppPassYds)}
+    ${line('Yards per pass attempt', avg(t.passYds,t.passAtt), avg(t.oppPassYds,t.oppPassAtt), 1)}
+    ${line('Yards per completion', avg(t.passYds,t.passComp), avg(t.oppPassYds,t.oppPassComp), 1)}
+    ${line('Plays from scrimmage', t.scrimPlays, t.oppScrimPlays)}
     ${line('Total yards', t.totalYards, t.oppTotalYards)}
-    ${line('Passing', t.passComp+'/'+t.passAtt, '—')}
+    ${line('Yards per play', avg(t.totalYards,t.scrimPlays), avg(t.oppTotalYards,t.oppScrimPlays), 1)}
     ${line('Turnovers lost', t.turnovers, t.takeaways)}
     ${line('Penalty yards', t.penYds, t.oppPenYds)}
     ${line('3rd down', t.thirdConv+'/'+t.thirdAtt, '—')}
     ${line('4th down', t.fourthConv+'/'+t.fourthAtt, '—')}
-    ${line('Sacks allowed', t.sacksAllowed, '—')}
+    ${line('Sacks', t.sacksBy+' by us', t.sacksAllowed+' by them')}
     </tbody></table></div></div>`;
   if(opts.scoringSummary!==false)
     h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet', total:false})}</div>`;
