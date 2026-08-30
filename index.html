@@ -483,7 +483,7 @@ tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-27';
+const APP_VERSION = '2026.08.30-28';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -871,11 +871,13 @@ function firstDownSpot(s){
 /* Which way round to draw the field. Teams change ends after every quarter,
    so the picture alternates on its own; g.endsFlipped records which way they
    were pointing in the first quarter. */
-function fieldFlipped(q){
+/* One orientation for the whole screen. Everything on view — the strip and any
+   kick field — is drawn the way the field looks right now, so two pictures can
+   never disagree with each other. */
+function fieldFlipped(){
   const g = game(); if(!g) return false;
-  const base = !!g.endsFlipped;
-  const evenQuarter = ((q || g.sit.q || 1) % 2) === 0;
-  return base !== evenQuarter;          // XOR: flip on even quarters
+  const evenQuarter = ((g.sit.q || 1) % 2) === 0;
+  return !!g.endsFlipped !== evenQuarter;      // XOR: ends change every quarter
 }
 function fieldHTML(o){
   const flip = !!o.flip;
@@ -907,7 +909,7 @@ function renderFieldStrip(){
   const g = game();
   if(!g){ box.innerHTML=''; return; }
   const s = g.sit;
-  const flip = fieldFlipped(s.q);
+  const flip = fieldFlipped();
   const rightward = (s.poss==='us') !== flip;
   // the dotted line marks the line of scrimmage; the ball sits on it
   box.innerHTML = fieldHTML({ spot:s.spot, los:s.spot, fd:firstDownSpot(s), poss:s.poss, flip:flip }) +
@@ -1037,7 +1039,7 @@ function spotPickerHTML(field, val, label){
   const yl = v<=50 ? v : 100-v;
   let h=`<h3 style="margin-top:10px">${esc(label)}</h3>`;
   h += fieldHTML({ spot:v, los:(E&&E.p)?E.p.spot:null, poss:(E&&E.p)?E.p.poss:'us', pick:field,
-                   flip: fieldFlipped((E&&E.p)?E.p.q:null) });
+                   flip: fieldFlipped() });
   h += `<div class="row tight" style="margin-bottom:6px">
       <div class="seg" style="flex:none">
         <button data-side="${field}|own" class="${side==='own'?'on':''}">${esc(usShort())}</button>
