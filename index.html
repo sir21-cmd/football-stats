@@ -407,9 +407,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
     <div class="card noprint">
       <h3>Game reports</h3>
       <div class="bigrow">
-        <button class="btn p" data-rep="report">Game report<small>send to coaches</small></button>
-        <button class="btn" data-rep="maxpreps">MaxPreps<small>entry sheet</small></button>
-        <button class="btn" data-rep="both">Both<small>one PDF</small></button>
+        <button class="btn p" data-rep="report">Game report<small>coaches &amp; MaxPreps</small></button>
       </div>
       <hr>
       <h3>Export</h3>
@@ -509,7 +507,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-32';
+const APP_VERSION = '2026.08.30-33';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2332,7 +2330,7 @@ function T(cols, rows, opts){
     const blank = v => v==null || ['0','','0/0','0.0','—'].indexOf(String(v))>=0;
     cols = cols.filter(c => !c.opt || rows.some(r => !blank(c.f ? c.f(r) : r[c.k])));
   }
-  const wide = cols.length > 10 ? ' class="wide"' : '';
+  const wide = cols.length > 12 ? ' class="wide"' : '';
   const head = cols.map(c=>`<th title="${esc(c.t||c.l)}">${esc(c.l)}</th>`).join('');
   const body = rows.map(r=>'<tr>'+cols.map(c=>{
       const v = c.f? c.f(r) : r[c.k];
@@ -2358,6 +2356,8 @@ const C_NUM = {k:'num', l:'#'};
 const C_NAME= {k:'name', l:'Player', f:r=>r.name||('#'+r.num)};
 const avg = (y,a)=> a? (y/a).toFixed(1) : '0.0';
 const SUM = (rows,k)=> rows.reduce((n,r)=>n+(r[k]||0),0);
+/* MaxPreps folds return/loss yardage into the cell: 2 sacks for 14 reads "2 (14)" */
+const fold = (n,y)=> (y? n+' ('+y+')' : String(n||0));
 
 const COLS = {
   rush:[C_NUM,C_NAME,{k:'att',l:'Att',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.att),tf:t=>avg(t.yds,t.att)},
@@ -2366,10 +2366,16 @@ const COLS = {
         {k:'yds',l:'Yds',sum:1},{k:'td',l:'TD',sum:1},{k:'int',l:'Int',sum:1},{k:'long',l:'Long',sum:1},{k:'fum',l:'Fum',sum:1,opt:1}],
   rec:[C_NUM,C_NAME,{k:'rec',l:'Rec',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.rec),tf:t=>avg(t.yds,t.rec)},
        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1},{k:'conv',l:'2pt',sum:1,opt:1},{k:'fum',l:'Fum',sum:1,opt:1}],
-  def:[C_NUM,C_NAME,{k:'t',l:'Solo',sum:1},{k:'a',l:'Ast',sum:1},{k:'tot',l:'Tot',sum:1},{k:'tfl',l:'TFL',sum:1,opt:1},
-       {k:'sk',l:'Sack',sum:1,opt:1},{k:'skYds',l:'SkYd',sum:1,opt:1},{k:'int',l:'Int',sum:1,opt:1},{k:'intYds',l:'IntYd',sum:1,opt:1},
-       {k:'pd',l:'PD',sum:1,opt:1},{k:'fc',l:'FF',sum:1,opt:1},{k:'fr',l:'FR',sum:1,opt:1},{k:'frYds',l:'FRYd',sum:1,opt:1},
-       {k:'hur',l:'Hur',sum:1,opt:1},{k:'bk',l:'Blk',sum:1,opt:1},{k:'bpt',l:'BPt',sum:1,opt:1},{k:'saf',l:'Saf',sum:1,opt:1},{k:'td',l:'TD',sum:1,opt:1}],
+  // the nine that print every week — the same eight codes the tagging panel puts
+  // on its front row, plus the derived total. Yardage folds into its own stat.
+  def:[C_NUM,C_NAME,{k:'t',l:'Solo',sum:1},{k:'a',l:'Ast',sum:1},{k:'tot',l:'Tot',sum:1},{k:'tfl',l:'TFL',sum:1},
+       {k:'sk',l:'Sack',sum:1,f:r=>fold(r.sk,r.skYds),tf:(t,rows)=>fold(SUM(rows,'sk'),SUM(rows,'skYds'))},
+       {k:'int',l:'Int',sum:1,f:r=>fold(r.int,r.intYds),tf:(t,rows)=>fold(SUM(rows,'int'),SUM(rows,'intYds'))},
+       {k:'pd',l:'PD',sum:1},{k:'fc',l:'FF',sum:1},
+       {k:'fr',l:'FR',sum:1,f:r=>fold(r.fr,r.frYds),tf:(t,rows)=>fold(SUM(rows,'fr'),SUM(rows,'frYds'))},
+       // these only appear when somebody actually records one
+       {k:'hur',l:'Hur',sum:1,opt:1},{k:'bk',l:'Blk',sum:1,opt:1},{k:'bpt',l:'BPt',sum:1,opt:1},
+       {k:'saf',l:'Saf',sum:1,opt:1},{k:'td',l:'TD',sum:1,opt:1}],
   ret:[C_NUM,C_NAME,{k:'ret',l:'Ret',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.ret),tf:t=>avg(t.yds,t.ret)},
        {k:'long',l:'Long',sum:1},{k:'td',l:'TD',sum:1,opt:1},{k:'fc',l:'FC',sum:1,opt:1}],
   punt:[C_NUM,C_NAME,{k:'no',l:'Punts',sum:1},{k:'yds',l:'Yds',sum:1},{k:'avg',l:'Avg',f:r=>avg(r.yds,r.no),tf:t=>avg(t.yds,t.no)},
@@ -2379,7 +2385,7 @@ const COLS = {
   kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga,tf:(t,rows)=>SUM(rows,'fgm')+'/'+SUM(rows,'fga')},{k:'fgLong',l:'Long',sum:1},
         {k:'patm',l:'PAT',f:r=>r.patm+'/'+r.pata,tf:(t,rows)=>SUM(rows,'patm')+'/'+SUM(rows,'pata')}],
   score:[C_NUM,C_NAME,{k:'tdRun',l:'TD Run',sum:1},{k:'tdRec',l:'TD Rec',sum:1},{k:'tdMisc',l:'TD Misc',sum:1},
-         {k:'patMade',l:'PAT',f:r=>r.patMade+'/'+r.patAtt},{k:'convRun',l:'2pt Run',sum:1},{k:'convRec',l:'2pt Rec',sum:1},
+         {k:'patMade',l:'PAT',f:r=>r.patMade+'/'+r.patAtt},{k:'convRun',l:'2pt Run',sum:1},{k:'convRec',l:'2pt Rec',sum:1},{k:'convDef',l:'2pt Def',sum:1,opt:1},
          {k:'fgMade',l:'FG',f:r=>r.fgMade+'/'+r.fgAtt},{k:'fgLong',l:'FG Lg',sum:1},{k:'saf',l:'Saf',sum:1}]
 };
 function grp(title, html){ return `<div class="statgrp"><h3>${esc(title)}</h3>${html}</div>`; }
@@ -2463,11 +2469,7 @@ function runReport(kind){
   if(kind==='csvstats') return csvStats(g,s);
   if(kind==='backup')   return exportGame(g);
   const box=$('#repBody');
-  if(kind==='maxpreps') box.innerHTML = maxprepsHTML(g,s);
-  if(kind==='report')   box.innerHTML = gameReportHTML(g,s);
-  if(kind==='both')     box.innerHTML = bothHTML(g,s);
-  if(kind==='box')      box.innerHTML = boxHTML(g,s);
-  if(kind==='recap')    box.innerHTML = recapHTML(g,s);
+  box.innerHTML = gameReportHTML(g,s);
   box.scrollIntoView({behavior:'smooth', block:'start'});
 }
 function repHead(g, title){
@@ -2480,51 +2482,11 @@ function repHead(g, title){
 }
 function mpRow(label, cols){ return `<tr><td>${esc(label)}</td>${cols.map(c=>`<td class="num">${c}</td>`).join('')}</tr>`; }
 
-function maxprepsHTML(g,s,opts){
-  opts = opts || {};
-  const sec=(title, cols, rows)=> `<div class="statgrp"><h3>${esc(title)}</h3>`+
-    (rows.length? `<div class="tblwrap"><table${cols.length>6?' class="wide"':''}><thead><tr><th>#</th><th>Player</th>${cols.map(c=>`<th>${esc(c[0])}</th>`).join('')}</tr></thead><tbody>`+
-      rows.map(r=>`<tr><td><b>${esc(r.num)}</b></td><td>${esc(r.name||'')}</td>${cols.map(c=>`<td class="num">${c[1](r)}</td>`).join('')}</tr>`).join('')+
-      '</tbody></table></div>' : '<p class="small muted">None</p>')+'</div>';
-  let h=`<div class="sheet">${repHead(g,'MaxPreps entry sheet')}
-    <p class="note noprint">These are the same categories, in the same order, as the MaxPreps stat forms — read straight down each column as you key it in.</p>`;
-  h+=sec('Rushing', [['Total Rushes',r=>r.att],['Total Yards',r=>r.yds],['Longest Run',r=>r.long],
-        ['Touchdowns',r=>r.td],['Conversions',r=>r.conv],['Fumbles',r=>r.fum]], s.rushing);
-  h+=sec('Passing', [['Compl. Passes',r=>r.comp],['Pass Attempts',r=>r.att],["Int's",r=>r.int],
-        ['Total Yards',r=>r.yds],['TD Passes',r=>r.td],['Longest',r=>r.long],['Fumbles',r=>r.fum]], s.passing);
-  h+=sec('Receiving', [['Total Catches',r=>r.rec],['Total Yards',r=>r.yds],['Longest Catch',r=>r.long],
-        ['Touchdowns',r=>r.td],['Conversions',r=>r.conv],['Fumbles',r=>r.fum]], s.receiving);
-  h+=`<div class="statgrp"><h3>Team</h3><div class="tblwrap"><table><tbody>
-      <tr><td>First downs</td><td class="num"><b>${s.team.firstDowns}</b></td></tr>
-      <tr><td>Penalty yards</td><td class="num"><b>${s.team.penYds}</b></td></tr>
-      </tbody></table></div></div>`;
-  h+=sec('Defense', [['T',r=>r.t],['A',r=>r.a],['TKLS',r=>r.tfl],['SK',r=>r.sk+(r.skYds?` (${r.skYds})`:'')],
-        ['INT',r=>r.int+(r.intYds?` (${r.intYds})`:'')],['PD',r=>r.pd],['FC',r=>r.fc],
-        ['FR',r=>r.fr+(r.frYds?` (${r.frYds})`:'')],['HUR',r=>r.hur],['BK',r=>r.bk],['BPT',r=>r.bpt],['S',r=>r.saf]], s.defense);
-  h+=sec('Punt returns', [['Return Attempts',r=>r.ret],['Total Yards',r=>r.yds],['Longest Return',r=>r.long],
-        ['Fair Catch',r=>r.fc],['Touchdowns',r=>r.td]], s.puntRet);
-  h+=sec('Kickoff returns', [['Return Attempts',r=>r.ret],['Total Yards',r=>r.yds],['Longest Return',r=>r.long],
-        ['Touchdowns',r=>r.td]], s.koRet);
-  h+=sec('Punts', [['Total Punts',r=>r.no],['Total Punt Yards',r=>r.yds],['Longest Punt',r=>r.long],
-        ['Inside 20 Yards',r=>r.in20]], s.punts);
-  h+=sec('Kickoffs', [['Total Kickoffs',r=>r.no],['Total Kickoff Yards',r=>r.yds],['Longest Kickoff',r=>r.long],
-        ['Touch Backs',r=>r.tb]], s.kickoffs);
-  // short labels: twelve columns on Letter can't hold long words without
-  // breaking them mid-word
-  h+=sec('Scoring summary', [['TD Run',r=>r.tdRun],['TD Rec',r=>r.tdRec],['TD Misc',r=>r.tdMisc],
-        ['PAT Made',r=>r.patMade],['PAT Att',r=>r.patAtt],['Conv Run',r=>r.convRun],['Conv Rec',r=>r.convRec],
-        ['Conv Def',r=>r.convDef],['FG Made',r=>r.fgMade],['FG Att',r=>r.fgAtt],['FG Long',r=>r.fgLong],
-        ['Safety',r=>r.saf]], s.scoring);
-  if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div>`;
-  h+='</div>';
-  return h;
-}
-/* One document for coaches: the story, the team numbers, the scoring, then
-   every stat line. Nothing appears twice. */
 function gameReportHTML(g,s,opts){
   opts = opts || {};
   const verb = s.score.usTotal>s.score.themTotal ? 'beat'
              : (s.score.usTotal<s.score.themTotal ? 'fell to' : 'tied');
+  const P = {empty:'None', hideEmpty:true};
   let h=`<div class="sheet">${repHead(g,'Game report')}`;
   h+=`<p style="font-size:1.02rem; margin-top:0">${esc(usName())} ${verb} ${esc(g.opponent)}
       <b>${s.score.usTotal}&ndash;${s.score.themTotal}</b>${g.place?' at '+esc(g.place):''} on ${esc(g.date)}.
@@ -2532,61 +2494,23 @@ function gameReportHTML(g,s,opts){
       ${s.team.passYds} passing — and ${s.team.firstDowns} first ${plural(s.team.firstDowns,'down')}.</p>`;
   h+=teamHTML(g,s,{scoringSummary:false, scoringPlays:false});
   h+=scoringListHTML(g);
-  h+=grp('Rushing', T(COLS.rush, s.rushing, {empty:'None', hideEmpty:true}));
-  h+=grp('Passing', T(COLS.pass, s.passing, {empty:'None', hideEmpty:true}));
-  h+=grp('Receiving', T(COLS.rec, s.receiving, {empty:'None', hideEmpty:true}));
-  h+=grp('Defense', T(COLS.def, s.defense, {empty:'None', hideEmpty:true}));
-  h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None', hideEmpty:true}));
-  h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None', hideEmpty:true}));
-  h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
-  h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
+  h+=grp('Rushing', T(COLS.rush, s.rushing, P));
+  h+=grp('Passing', T(COLS.pass, s.passing, P));
+  h+=grp('Receiving', T(COLS.rec, s.receiving, P));
+  h+=grp('Defense', T(COLS.def, s.defense, P));
+  h+=grp('Punt returns', T(COLS.ret, s.puntRet, P));
+  h+=grp('Kickoff returns', T(COLS.ret, s.koRet, P));
+  h+=grp('Punting', T(COLS.punt, s.punts, P));
+  h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, P));
+  h+=grp('Place kicking', T(COLS.kick, s.kicking, P));
+  // the one section the MaxPreps sheet used to carry on its own
+  h+=grp('Scoring summary', T(COLS.score, s.scoring, {empty:'No scoring', hideEmpty:true, total:false}));
   if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px">
-    <button class="btn p" onclick="window.print()">Print / save as PDF</button></div>`;
+    <button class="btn p" onclick="window.print()">Print / save as PDF</button>
+    <span class="small muted">One document: send it to the coaches and key MaxPreps from the same page.</span></div>`;
   h+='</div>';
   return h;
 }
-function bothHTML(g,s){
-  return gameReportHTML(g,s,{noPrint:true}) +
-    '<div class="pagebreak"></div>' + maxprepsHTML(g,s,{noPrint:true}) +
-    `<div class="row noprint" style="margin:12px 0">
-       <button class="btn p" onclick="window.print()">Print / save as PDF</button>
-       <span class="small muted">Two pages in one PDF — the coach report, then the MaxPreps sheet.</span></div>`;
-}
-function boxHTML(g,s){
-  const t=s.team;
-  let h=`<div class="sheet">${repHead(g,'Box score')}`;
-  h+=teamHTML(g,s);
-  h+=grp('Rushing', T(COLS.rush, s.rushing, {empty:'None', hideEmpty:true}));
-  h+=grp('Passing', T(COLS.pass, s.passing, {empty:'None', hideEmpty:true}));
-  h+=grp('Receiving', T(COLS.rec, s.receiving, {empty:'None', hideEmpty:true}));
-  h+=grp('Defense', T(COLS.def, s.defense, {empty:'None', hideEmpty:true}));
-  h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None', hideEmpty:true}));
-  h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None', hideEmpty:true}));
-  h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
-  h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
-  h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div></div>`;
-  return h;
-}
-function recapHTML(g,s){
-  const lead=(rows,fmt)=> rows.slice().sort((a,b)=>b.yds-a.yds).slice(0,3).map(fmt).join('; ') || 'none';
-  let h=`<div class="sheet">${repHead(g,'Game recap')}`;
-  h+=`<p>${esc(usName())} ${s.score.usTotal>s.score.themTotal?'beat':(s.score.usTotal<s.score.themTotal?'fell to':'tied')}
-      ${esc(g.opponent)} ${s.score.usTotal}&ndash;${s.score.themTotal}${g.place?' at '+esc(g.place):''} on ${esc(g.date)}.
-      ${esc(usName())} rolled up ${s.team.totalYards} total yards (${s.team.rushYds} rushing, ${s.team.passYds} passing)
-      and ${s.team.firstDowns} first ${plural(s.team.firstDowns,'down')}.</p>`;
-  h+=`<p><b>Rushing:</b> ${lead(s.rushing, r=>`${r.name||('#'+r.num)} ${r.att}-${r.yds}${r.td?', '+r.td+' TD':''}`)}<br>
-      <b>Passing:</b> ${lead(s.passing, r=>`${r.name||('#'+r.num)} ${r.comp}/${r.att}, ${r.yds} yds${r.td?', '+r.td+' TD':''}${r.int?', '+r.int+' INT':''}`)}<br>
-      <b>Receiving:</b> ${lead(s.receiving, r=>`${r.name||('#'+r.num)} ${r.rec}-${r.yds}${r.td?', '+r.td+' TD':''}`)}<br>
-      <b>Defense:</b> ${s.defense.slice().sort((a,b)=>b.tot-a.tot).slice(0,3).map(r=>`${r.name||('#'+r.num)} ${r.tot} tkl${r.sk?', '+r.sk+' sack':''}${r.int?', '+r.int+' INT':''}`).join('; ')||'none'}</p>`;
-  const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
-  h+=`<div class="statgrp"><h3>Scoring plays</h3>`+(sc.length?
-      '<ol class="small">'+sc.map(p=>`<li>${qLabel(p.q)} — ${esc(p.poss==='us'?usName():themName())}: ${esc(playText(p))}</li>`).join('')+'</ol>'
-      : '<p class="small muted">No scoring recorded.</p>')+'</div>';
-  h+=`<div class="row noprint" style="margin-top:12px"><button class="btn p" onclick="window.print()">Print / save as PDF</button></div></div>`;
-  return h;
-}
-
-/* ---------- CSV ---------- */
 function csvEsc(v){ v=String(v==null?'':v); return /[",\n]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v; }
 function toCSV(rows){ return rows.map(r=>r.map(csvEsc).join(',')).join('\n'); }
 function csvPlays(g){
