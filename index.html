@@ -236,6 +236,38 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
 /* modal */
 #modal{position:fixed; inset:0; z-index:60; background:#0f172acc; display:flex; align-items:flex-end; justify-content:center; padding:0}
 #modal.hide{display:none}
+/* ---------- How to use ---------- */
+.help{font-size:.95rem; line-height:1.55}
+.help .lede{background:var(--paper); border:1px solid var(--line); border-radius:var(--r);
+  padding:13px 15px; margin-bottom:10px; box-shadow:var(--shadow)}
+.help .lede h3{margin:0 0 6px; font-size:1.02rem}
+.help ol.quick{margin:8px 0 0; padding-left:22px}
+.help ol.quick li{margin:5px 0}
+.help details{background:var(--paper); border:1px solid var(--line); border-radius:var(--r);
+  margin:7px 0; overflow:hidden}
+.help details[open]{box-shadow:var(--shadow)}
+.help summary{padding:12px 14px; font-weight:700; cursor:pointer; list-style:none;
+  display:flex; align-items:center; gap:9px; min-height:46px}
+.help summary::-webkit-details-marker{display:none}
+.help summary::after{content:'+'; margin-left:auto; color:var(--muted);
+  font-weight:700; font-size:1.25rem; line-height:1}
+.help details[open] summary::after{content:'\2212'}
+.help summary:hover{background:var(--bg)}
+.help .hbody{padding:0 14px 13px}
+.help .hbody p{margin:8px 0}
+.help .hbody ol, .help .hbody ul{margin:8px 0; padding-left:21px}
+.help .hbody li{margin:4px 0}
+.help .step{background:var(--bg); border-radius:9px; padding:9px 12px; margin:8px 0;
+  overflow-wrap:anywhere}
+.help .step code{display:block; font-size:.92em; line-height:1.7; white-space:normal;
+  overflow-wrap:anywhere}
+.help kbd{display:inline-block; background:var(--bg); border:1px solid var(--line);
+  border-bottom-width:2px; border-radius:6px; padding:1px 7px; font:inherit;
+  font-weight:700; font-size:.9em; white-space:nowrap}
+.help .warnbox{border-left:4px solid var(--warn); background:#fffbeb;
+  padding:9px 12px; border-radius:0 8px 8px 0; margin:9px 0}
+.help .tipbox{border-left:4px solid var(--go); background:#f0fdf4;
+  padding:9px 12px; border-radius:0 8px 8px 0; margin:9px 0}
 .modalbody{background:var(--bg); width:100%; max-width:760px; max-height:92vh; overflow:auto;
   border-radius:16px 16px 0 0; padding:14px 12px calc(20px + env(safe-area-inset-bottom))}
 @media(min-width:700px){ #modal{align-items:center} .modalbody{border-radius:16px; max-height:88vh} }
@@ -507,7 +539,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-34';
+const APP_VERSION = '2026.08.30-35';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2712,14 +2744,212 @@ function importGameFile(obj){
 
 /* ---------- help ---------- */
 function showHelp(){
-  openModal('How to use it', `<div class="card small">
-    <p><b>Before the game.</b> Add your roster once in Setup (paste it in), put your team name in, then tap <b>+ New game</b>.</p>
-    <p><b>During the game.</b> The Game tab always shows whose ball it is and the down &amp; distance. Tap the play type, tap the player, tap the yards, tap <b>Save play</b>. Down, distance, field position, first downs and the score all keep themselves up to date.</p>
-    <p><b>On defense.</b> Switch the ball over to the other team, log their play, then pick a stat code (T, A, SK, INT…) and tap the jersey numbers who earned it. Sacks, picks and fumble recoveries have a yardage stepper on the tag.</p>
-    <p><b>Made a mistake?</b> <b>Undo</b> up top removes the last play. Tap any play in the list to edit or delete it. <b>Fix down / spot</b> resets the situation whenever the app and the chain gang disagree.</p>
-    <p><b>Two scorers.</b> Run this on both devices. Afterwards, Export the game from the backup device, then on the main device use <b>Import &amp; compare</b> under Reports — it shows only the plays the backup caught that you missed.</p>
-    <p><b>After the game.</b> Reports → MaxPreps entry sheet gives you every number in the order MaxPreps asks for it. Box score and Recap print to PDF.</p>
-    <p><b>Your data.</b> Everything is stored in this browser on this device — no account, no internet needed. Back up after each game from Setup.</p>
+  const sec = (title, body) => `<details><summary>${title}</summary><div class="hbody">${body}</div></details>`;
+  openModal('How to use it', `<div class="help">
+
+  <div class="lede">
+    <h3>What this is</h3>
+    <p>You log each play once, as it happens. The app works out everything else —
+    down and distance, field position, the score, every player's stat line, and the
+    report you send to the coaches and key into MaxPreps. You never add anything up
+    yourself.</p>
+    <p><b>First time here?</b> Three things, in this order:</p>
+    <ol class="quick">
+      <li>Open <b>Setup</b> and type your team name.</li>
+      <li>Add your roster — <b>Paste list</b> takes a whole team at once.</li>
+      <li>Tap <b>+ New game</b>, and you're ready to score.</li>
+    </ol>
+    <p class="tiny muted" style="margin-bottom:0">Everything is saved on this device
+    as you go. No account, no signal needed. Sections below open when you tap them.</p>
+  </div>
+
+  ${sec('Setting up, once before the season', `
+    <p>Open the <b>Setup</b> tab at the top.</p>
+    <ol>
+      <li><b>Our team name</b> — type it as you want it printed. It replaces "US"
+      everywhere, including on the report.</li>
+      <li><b>Scorer / device name</b> — only matters if two people are scoring on two
+      devices. It labels the file so you can tell them apart.</li>
+      <li><b>Roster</b> — tap <b>Paste list</b> and paste your whole team at once.
+      One player per line, number first:
+      <div class="step"><code>7 Marcus Whitfield QB<br>22 Deshawn Carter RB/LB<br>
+      54 Nikolai Kollenberg OL/DL/K</code></div>
+      Positions are optional but worth doing — they print on the buttons during the
+      game, so you can find the right kid without hunting for his number. A two-way
+      player gets both, separated by a slash.</li>
+      <li><b>Charge sacks to the quarterback's rushing</b> — leave this on. It is how
+      high school and MaxPreps count sack yardage. Turn it off only if your league
+      does it the NFL way.</li>
+    </ol>
+    <p>You only do this once. The roster carries from game to game all season.</p>`)}
+
+  ${sec('Starting a game', `
+    <p>Setup → <b>+ New game</b>. Fill in the opponent, the date, home or away, and
+    who is kicking off.</p>
+    <p>That last one matters: the app puts the ball on the kicking team's own 40,
+    which is where high school kicks off from. If you pick wrong, you can fix it with
+    <b>Fix down / spot</b> on the Game tab.</p>`)}
+
+  ${sec('Logging a play — the part you do 60 times a night', `
+    <p>The Game tab always shows whose ball it is and the down and distance. The
+    rhythm is the same every time:</p>
+    <div class="step"><b>Tap the play type → tap the player → tap the yards →
+    tap Save play.</b></div>
+    <ul>
+      <li><b>RUN</b> and <b>PASS</b> are the big dark buttons because they are most of
+      the night.</li>
+      <li>The player buttons show number, name and position, so you are not trying to
+      remember who wears 54.</li>
+      <li>The app narrows the list to players who make sense — backs on a run, receivers
+      on a pass, your kicker on a kick. Everyone is still reachable if you need someone
+      unexpected.</li>
+      <li>Yards can be typed or nudged with the + and − buttons. A loss is a negative
+      number.</li>
+    </ul>
+    <p>When you save, the down, the distance, the ball's position, first downs and the
+    score all update themselves. If it was a touchdown, the app asks about the extra
+    point straight away.</p>`)}
+
+  ${sec('When the other team has the ball', `
+    <p>Tap <b>Their ball</b> at the top of the Game tab, then log their play the same
+    way — what they ran, how far it went.</p>
+    <p>Underneath, a row of buttons appears for <b>your</b> defenders:</p>
+    <ul>
+      <li><b>T</b> tackle · <b>A</b> assist · <b>TFL</b> tackle for loss ·
+      <b>SK</b> sack</li>
+      <li><b>INT</b> interception · <b>PD</b> pass defended ·
+      <b>FC</b> forced fumble · <b>FR</b> fumble recovery</li>
+    </ul>
+    <p>Tap the code, then tap the jersey numbers who earned it. More than one player
+    can be on the same play — two kids on a tackle is a solo and an assist, or two
+    assists, whichever you saw.</p>
+    <p>Sacks, interceptions and fumble recoveries have a yardage box on the tag, for
+    the yards lost or returned. <b>More</b> holds the rarer ones — hurries, blocked
+    kicks, safeties.</p>
+    <div class="tipbox">You do not need to tag every play. Tag what your coaches
+    actually want counted. Nothing breaks if a play has no defensive tag on it.</div>`)}
+
+  ${sec('Kicks, punts, extra points and penalties', `
+    <ul>
+      <li><b>PUNT</b> — the punter, how far, and whether it was returned. Tap the field
+      picture to place where it landed.</li>
+      <li><b>KICKOFF</b> — the kicker, where it landed, and the return.</li>
+      <li><b>FIELD GOAL</b> — the kicker and the distance, good or no good.</li>
+      <li><b>Extra point / 2-pt</b> — the app usually offers this on its own right
+      after a touchdown, so you rarely tap it yourself.</li>
+      <li><b>PENALTY</b> — pick the foul from the list. The yardage and the automatic
+      first down are already built in, so the ball ends up in the right place.</li>
+      <li><b>Note / timeout</b> — anything you want in the log that is not a play.</li>
+    </ul>`)}
+
+  ${sec('The field picture', `
+    <p>The strip under the scoreboard is the field. The blue circle is the ball, with
+    the yard line inside it. The dotted line is the line of scrimmage.</p>
+    <p><b>Make it match what you are watching.</b> If your team is going right to left
+    in front of you, set it that way — tap the arrow to flip which end you are
+    defending. When it matches the real field, you stop second-guessing yourself in
+    the fourth quarter.</p>
+    <p>On kicks, tap anywhere on the field to place the ball instead of typing yards.</p>`)}
+
+  ${sec('Changing quarters', `
+    <p>When a quarter ends, tap <b>End of Q1</b> in the play menu. It moves you to the
+    next quarter and swaps which end you are defending, because that is what happens on
+    the field.</p>
+    <p>Two safety nets, because forgetting is the single easiest mistake to make:</p>
+    <ul>
+      <li>If a quarter runs long, a yellow bar appears asking whether you are still in
+      it. Tap the button or dismiss it.</li>
+      <li>If you already forgot — say the whole first half is sitting in Q1 — go to the
+      <b>Plays</b> tab. Under <b>Set quarter · plays</b>, enter the range of play
+      numbers and the quarter they belong to, then <b>Apply</b>.</li>
+    </ul>
+    <div class="tipbox">Getting the quarter wrong is not a disaster. It only affects the
+    score-by-quarter line and how the log is grouped. Every stat total is correct
+    either way.</div>`)}
+
+  ${sec('Fixing a mistake', `
+    <p>Everything is fixable, during the game or days later.</p>
+    <ul>
+      <li><b>Undo</b>, top right, removes the play you just saved.</li>
+      <li><b>Tap any play</b> in the list to change or delete it. You can change the
+      yards, the player, even the play type or which team ran it.</li>
+      <li>Know the play number? <b>Plays</b> tab → type it → <b>Open it</b>.</li>
+      <li>Missed one entirely? <b>Insert before it</b> slots a play into the middle.</li>
+      <li><b>Fix down / spot</b> on the Game tab resets the situation whenever the app
+      and the chain gang disagree. Use it without worrying — it does not touch any
+      stats.</li>
+    </ul>
+    <p>Edit a play and everything downstream recalculates — the down, the distance,
+    the field position, the totals.</p>`)}
+
+  ${sec('Finishing the game and getting your report', `
+    <p>Tap <b>Finish game</b> on the Game tab. It walks a short checklist so nothing is
+    missing, then marks the game final.</p>
+    <p>Then <b>Reports</b> → <b>Game report</b>. It is one document that covers both
+    jobs: readable enough to send the coaching staff, and complete enough to key into
+    MaxPreps from the same page. Tap <b>Print / save as PDF</b> to send it or print it.</p>
+    <p>Also on that tab:</p>
+    <ul>
+      <li><b>Play log (CSV)</b> — every play, for a spreadsheet.</li>
+      <li><b>Stat lines (CSV)</b> — the finished numbers.</li>
+      <li><b>Backup (game file)</b> — this one game, saved as a file.</li>
+    </ul>
+    <p>Noticed a mistake after finishing? Reopen the game from Setup → Games, fix it,
+    and finish it again.</p>`)}
+
+  ${sec('Backing up — the one section to actually read', `
+    <div class="warnbox"><b>Your stats live in this browser, on this device.</b>
+    Nothing is on the internet. If you clear your browsing data, or the device is lost
+    or replaced, the season goes with it. There is no way to get it back.</div>
+    <p>So: <b>Setup → Back up everything</b> after every single game. It saves one file.
+    Email it to yourself, drop it in Drive, anywhere that is not this device.</p>
+    <p>To restore, on any device: <b>Setup → Restore from file</b> and pick that file.
+    Your whole season comes back — roster, every game, every play.</p>
+    <p>It takes ten seconds and it is the difference between a bad night and a lost
+    season.</p>`)}
+
+  ${sec('Two people scoring on two devices', `
+    <p>Worth doing for a big game. Run the app on both devices and score
+    independently — neither needs to talk to the other, and neither needs signal.</p>
+    <ol>
+      <li>Afterwards, on the <b>backup</b> device: Reports → <b>Backup (game file)</b>.</li>
+      <li>Get that file to the main device — AirDrop, email, whatever is easiest.</li>
+      <li>On the <b>main</b> device: Reports → <b>Import &amp; compare a game file</b>.</li>
+    </ol>
+    <p>It shows only the plays the backup caught that you missed, and you choose which
+    to keep. Nothing is overwritten without you saying so.</p>`)}
+
+  ${sec('Putting it on your home screen', `
+    <p>It opens like a normal app, full screen, with no browser bars in the way.</p>
+    <p><b>iPhone or iPad (Safari):</b> tap the Share button — the square with an arrow
+    coming out of it — scroll down, tap <b>Add to Home Screen</b>, then <b>Add</b>.</p>
+    <p><b>Android (Chrome):</b> tap the three dots, then <b>Add to Home screen</b>.</p>
+    <p>Once it is there it works with no signal at all, which matters at away fields.</p>`)}
+
+  ${sec('Keeping it up to date', `
+    <p>Setup shows the <b>App version</b> at the bottom. Every device that scores should
+    show the same one.</p>
+    <p>If a device is behind, tap <b>Check for update</b> and let it reload. Do this
+    before Friday rather than during the game — and check the backup scorer's device
+    too, not just your own.</p>
+    <p>Updating never touches your saved games.</p>`)}
+
+  ${sec('Something looks wrong', `
+    <p><b>The down or the ball position is off.</b> <b>Fix down / spot</b> on the Game
+    tab. It does not affect any stats.</p>
+    <p><b>A player's numbers look wrong.</b> Find the play in the Plays tab and open it.
+    Most of the time a play is tagged to the wrong jersey number.</p>
+    <p><b>A whole quarter is in the wrong place.</b> Plays tab → <b>Set quarter ·
+    plays</b> → give it the range.</p>
+    <p><b>The report is missing a player.</b> Players only appear once they have done
+    something. If he genuinely made a play, the play itself is missing or tagged to
+    someone else.</p>
+    <p><b>Two devices disagree.</b> That is what <b>Import &amp; compare</b> is for.</p>
+    <p><b>The app looks stuck or strange.</b> Close it and reopen it. Your data is saved
+    continuously — you will not lose the play you just entered.</p>
+    <div class="warnbox">Never clear your browser data or website data for this site
+    while a season is in progress. That is the one action that erases everything.</div>`)}
+
   </div>`);
 }
 
