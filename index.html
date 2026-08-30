@@ -257,10 +257,11 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
 .help .hbody p{margin:8px 0}
 .help .hbody ol, .help .hbody ul{margin:8px 0; padding-left:21px}
 .help .hbody li{margin:4px 0}
-.help .step{background:var(--bg); border-radius:9px; padding:9px 12px; margin:8px 0;
-  overflow-wrap:anywhere}
-.help .step code{display:block; font-size:.92em; line-height:1.7; white-space:normal;
-  overflow-wrap:anywhere}
+/* named hstep, not step — .step is already the 54px yardage stepper button */
+.help .hstep{display:block; background:var(--bg); border-radius:9px;
+  padding:10px 13px; margin:9px 0; width:auto}
+.help .hstep code{display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.9em; line-height:1.75}
 .help kbd{display:inline-block; background:var(--bg); border:1px solid var(--line);
   border-bottom-width:2px; border-radius:6px; padding:1px 7px; font:inherit;
   font-weight:700; font-size:.9em; white-space:nowrap}
@@ -539,7 +540,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-35';
+const APP_VERSION = '2026.08.30-37';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2772,8 +2773,7 @@ function showHelp(){
       devices. It labels the file so you can tell them apart.</li>
       <li><b>Roster</b> — tap <b>Paste list</b> and paste your whole team at once.
       One player per line, number first:
-      <div class="step"><code>7 Marcus Whitfield QB<br>22 Deshawn Carter RB/LB<br>
-      54 Nikolai Kollenberg OL/DL/K</code></div>
+      <div class="hstep"><code>54 Evan Ridley TE/LB<br>55 Liam Ridley C/LB/DT</code></div>
       Positions are optional but worth doing — they print on the buttons during the
       game, so you can find the right kid without hunting for his number. A two-way
       player gets both, separated by a slash.</li>
@@ -2793,7 +2793,7 @@ function showHelp(){
   ${sec('Logging a play — the part you do 60 times a night', `
     <p>The Game tab always shows whose ball it is and the down and distance. The
     rhythm is the same every time:</p>
-    <div class="step"><b>Tap the play type → tap the player → tap the yards →
+    <div class="hstep"><b>Tap the play type → tap the player → tap the yards →
     tap Save play.</b></div>
     <ul>
       <li><b>RUN</b> and <b>PASS</b> are the big dark buttons because they are most of
