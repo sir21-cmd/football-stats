@@ -102,6 +102,9 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
 .chip.on{border-color:var(--accent); background:#eff6ff; box-shadow:inset 0 0 0 1.5px var(--accent)}
 .chip.on span{color:var(--accent)}
 .chip.on .cpos{background:var(--accent); color:#fff}
+/* already tagged on this play, but with a different code */
+.chip.tagged{border-color:var(--gold); background:#fffbeb}
+.chip.tagged .cpos{background:var(--gold)}
 .chip.prime{border-color:#94a3b8; background:#fbfdff}
 .chip.prime .cpos{background:var(--ink)}
 .chip.prime.on{border-color:var(--accent); background:#eff6ff}
@@ -540,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.09-41';
+const APP_VERSION = '2026.09.09-44';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1078,20 +1081,28 @@ function renderQuarterNudge(){
 function chipsHTML(role, sel, opts){
   opts=opts||{};
   if(!DB.roster.length) return '<p class="small muted">No players yet — add your roster in Setup.</p>';
+  /* Offense picks one player; defense can have several on the same play, so
+     `sel` takes a number or a list of them. */
+  const picked = new Set((Array.isArray(sel) ? sel : (sel==null || sel==='' ? [] : [sel])).map(String));
+  const isOn = n => picked.has(String(n));
+  /* players already carrying a different code on this play — marked so you
+     can see at a glance who is spoken for */
+  const other = new Set((opts.otherTags||[]).map(String));
   const showingAll = !!(UI.showAll && UI.showAll[role]);
   const rec = (UI.recent[role]||[]).map(player).filter(p=> p && (showingAll || fitsRole(p,role)));
   let h='';
   if(rec.length && !opts.noRecent){
     h+='<div class="tiny muted" style="margin:2px 0 4px">Recent</div><div class="chips" style="margin-bottom:8px">';
     rec.forEach(p=>{
-      h+=`<button class="chip ${String(sel)===String(p.num)?'on':''} ${isPrime(p,role)?'prime':''}" data-pick="${esc(role)}" data-num="${esc(p.num)}">${chipInner(p,role)}</button>`; });
+      h+=`<button class="chip ${isOn(p.num)?'on':''} ${other.has(String(p.num))?'tagged':''} ${isPrime(p,role)?'prime':''}" data-pick="${esc(role)}" data-num="${esc(p.num)}">${chipInner(p,role)}</button>`; });
     h+='</div>';
   }
   const list = orderedRoster(role);
   h+='<div class="chips">';
   list.forEach(p=>{
     const cls = ['chip'];
-    if(String(sel)===String(p.num)) cls.push('on');
+    if(isOn(p.num)) cls.push('on');
+    else if(other.has(String(p.num))) cls.push('tagged');
     if(isPrime(p,role)) cls.push('prime');
     h+=`<button class="${cls.join(' ')}" data-pick="${esc(role)}" data-num="${esc(p.num)}">${chipInner(p,role)}</button>`;
   });
@@ -1256,7 +1267,10 @@ function defPanelHTML(){
     h+='<div class="legend">'+STAT_CODES.map(c=>
         `<div><b>${esc(c[0])}</b><span>${esc(c[1])}</span></div>`).join('')+'</div>';
   }
-  h+= chipsHTML('def', null, {noRecent:false});
+  // highlight everyone already given the code you are on, and mark anyone
+  // carrying a different code, so a second tap is never a guess
+  h+= chipsHTML('def', tags.filter(t=>t.s===UI.defStat).map(t=>t.n),
+                {noRecent:false, otherTags: tags.filter(t=>t.s!==UI.defStat).map(t=>t.n)});
   if(tags.length){
     h+='<div class="flags" style="margin-top:8px">'+tags.map((t,i)=>{
       let inner=`<b>${esc(t.s)}</b> #${esc(t.n)}`;
@@ -1265,6 +1279,27 @@ function defPanelHTML(){
     }).join('')+'</div>';
   }
   return h;
+}
+
+/* Our man recovering their fumble, or picking their pass, means we have the
+   ball. The tag is the thing the scorer actually taps, so let it turn the
+   matching flag on — visibly, so it can still be overruled. Reversing the tag
+   reverses the flag, but only if the tag is what set it. */
+function syncTurnoverFromTags(p){
+  if(!p || p.poss==='us') return;                       // our own offence
+  if(p.type==='punt' || p.type==='kickoff') return;     // kick muffs have their own rules
+  const has = s => (p.def||[]).some(d=>d.s===s);
+  if(has('FR')){
+    if(!p.fumLost){ p.fum=true; p.fumLost=true; p._toByTag=true; }
+  } else if(p._toByTag && p.fumLost){
+    p.fum=false; p.fumLost=false; delete p._toByTag;
+  }
+  if(has('INT')){
+    if(!p.int){ p.int=true; if(p.type==='pass') p.result='int'; p._toByTag=true; }
+  } else if(p._toByTag && p.int){
+    p.int=false; if(p.type==='pass' && p.result==='int') p.result='inc';
+    delete p._toByTag;
+  }
 }
 
 /* ---------- entry state machine ---------- */
@@ -1416,7 +1451,7 @@ function formHTML(g){
       {k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},
       {k:'fd', label:'1st down', on:p.fd},
       {k:'fum', label:'Fumble', on:p.fum},
-      {k:'fumLost', label:'Lost it', on:p.fumLost, kind:'danger'}
+      {k:'fumLost', label:'Fumble turnover', on:p.fumLost, kind:'danger'}
     ]);
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
@@ -1435,7 +1470,7 @@ function formHTML(g){
     // an incomplete pass can't be a score or a first down — don't offer it
     const fl=[];
     if(p.result==='comp') fl.push({k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},{k:'fd', label:'1st down', on:p.fd});
-    if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'});
+    if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
     if(p.result==='int') fl.push({k:'retTd', label:'Returned for TD', on:p.retTd, kind:'danger'});
     h+=flagHTML(fl);
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
@@ -1464,7 +1499,7 @@ function formHTML(g){
                         {k:'oob',label:'Out of bounds',on:p.oob,kind:'danger'});
     if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
                       {k:'fum',label:'Muffed/fumble',on:p.fum},
-                      {k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'});
+                      {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
     else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'});
     h+=flagHTML(fl);
     h+=prev;
@@ -1584,8 +1619,12 @@ function previewHTML(){
   const res = applyGain({q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot}, eff);
   let msg='', cls='note';
   if(p.td || res._td){ msg='TOUCHDOWN'; cls='warnbox'; }
-  else if(p.fum && p.fumLost){ msg='Turnover — fumble lost'; cls='warnbox'; }
-  else if(p.result==='int'){ msg='Turnover — interception'; cls='warnbox'; }
+  else if(p.fum && p.fumLost){
+    const gets = p.poss==='us' ? themName() : usName();
+    msg = 'Turnover — fumble · '+gets+' ball on '+spotLabel(res.spot); cls='warnbox'; }
+  else if(p.result==='int' || p.int){
+    const gets = p.poss==='us' ? themName() : usName();
+    msg = 'Turnover — interception · '+gets+' ball'; cls='warnbox'; }
   else if(res._safety){ msg='Safety'; cls='warnbox'; }
   else if(p.fd || res._fd){ msg='First down · ball on '+spotLabel(res.spot); }
   else if(res._downs){ msg='Turnover on downs · ball on '+spotLabel(res.spot); cls='warnbox'; }
@@ -1624,6 +1663,8 @@ function commitPlay(){
     p.fum=false; p.fumLost=false;
     p.penYds=15; p.penOn=p.poss; p.declined=false;
   }
+  syncTurnoverFromTags(p);        // in case the flag was never touched by hand
+  delete p._toByTag;              // internal only — never saved onto a play
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
@@ -2352,7 +2393,15 @@ function onEntryClick(e){
   const pick=t.closest('[data-pick]');
   if(pick){
     const role=pick.dataset.pick, num=pick.dataset.num;
-    if(role==='def'){ (p.def=p.def||[]).push({n:num, s:UI.defStat, y:0}); }
+    if(role==='def'){
+      /* Tapping a man who already has this code takes it off him. Before the
+         chips highlighted, a second tap silently gave him the stat twice. */
+      p.def = p.def||[];
+      const at = p.def.findIndex(d=> String(d.n)===String(num) && d.s===UI.defStat);
+      if(at>=0) p.def.splice(at,1);
+      else p.def.push({n:num, s:UI.defStat, y:0});
+      syncTurnoverFromTags(p);   // a recovery or a pick hands us the ball
+    }
     else p[role] = (String(p[role])===String(num)) ? null : num;
     return renderEntry();
   }
