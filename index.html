@@ -540,7 +540,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.09-40';
+const APP_VERSION = '2026.09.09-41';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1127,8 +1127,12 @@ function chipInner(p, role){
    until you tap "Show everyone" — but a player with no position listed is
    never hidden, and if a filter would empty the list we show everybody. */
 const ROLE_POS = {
-  rusher:  ['RB','FB','HB','TB','QB','WR','SLOT','WB','ATH','UTIL'],
-  passer:  ['QB','ATH','WR','RB','HB','TB','UTIL'],
+  /* Backs carry it and quarterbacks throw it. The halfback pass and the
+     receiver reverse are real, but they are a handful of snaps a season —
+     not worth putting fourteen names in front of you on every play.
+     "Show everyone" is one tap away when one of them comes up. */
+  rusher:  ['RB','FB','HB','TB'],
+  passer:  ['QB'],
   receiver:['WR','TE','RB','FB','HB','TB','SE','FL','SLOT','WB','ATH','UTIL'],
   returner:['WR','RB','HB','TB','DB','CB','S','FS','SS','KR','PR','ATH','SLOT','UTIL'],
   kicker:  ['K','PK','P'],
