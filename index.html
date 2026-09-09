@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.09-44';
+const APP_VERSION = '2026.09.09-45';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2904,9 +2904,13 @@ function showHelp(){
       the night.</li>
       <li>The player buttons show number, name and position, so you are not trying to
       remember who wears 54.</li>
-      <li>The app narrows the list to players who make sense — backs on a run, receivers
-      on a pass, your kicker on a kick. Everyone is still reachable if you need someone
-      unexpected.</li>
+      <li>The app shows only the players who make sense: <b>quarterbacks</b> on a pass,
+      <b>backs</b> on a run, receivers on a catch, your kicker on a kick. Two names
+      instead of fourteen, so your thumb goes straight to the right one.</li>
+      <li>Need somebody else — the halfback pass, a lineman recovering in the end zone?
+      <b>Show everyone</b> at the bottom of the list opens the whole roster. It applies
+      to the play in front of you and resets on the next one, so you never have to
+      remember to turn it back off.</li>
       <li>Yards can be typed or nudged with the + and − buttons. A loss is a negative
       number.</li>
     </ul>
@@ -2927,16 +2931,27 @@ function showHelp(){
     <p>Tap the code, then tap the jersey numbers who earned it. More than one player
     can be on the same play — two kids on a tackle is a solo and an assist, or two
     assists, whichever you saw.</p>
+    <p><b>The colours tell you where you are.</b> A player turns <b>blue</b> when he has
+    the code you are on, and <b>gold</b> when he already has a different one — so you can
+    see at a glance who is spoken for without reading the tag list.</p>
+    <p><b>Tapped the wrong number?</b> Tap him again and the code comes back off. You can
+    also tap the &times; on any tag in the row underneath.</p>
     <p>Sacks, interceptions and fumble recoveries have a yardage box on the tag, for
     the yards lost or returned. <b>More</b> holds the rarer ones — hurries, blocked
     kicks, safeties.</p>
+    <div class="tipbox"><b>FR and INT hand you the ball.</b> Tag a fumble recovery or an
+    interception on their play and the app gives you possession, ticks the turnover flag
+    where you can see it, and moves the ball. Take the tag back off and it goes back to
+    them. You do not need to set anything else.</div>
     <div class="tipbox">You do not need to tag every play. Tag what your coaches
     actually want counted. Nothing breaks if a play has no defensive tag on it.</div>`)}
 
   ${sec('Kicks, punts, extra points and penalties', `
     <ul>
       <li><b>PUNT</b> — the punter, how far, and whether it was returned. Tap the field
-      picture to place where it landed.</li>
+      picture to place where it landed. If the returner coughs it up, tap
+      <b>Muffed/fumble</b> and <b>Fumble turnover</b>: the app charges the turnover to
+      the returning team, not the kicking team, and gives the ball back.</li>
       <li><b>KICKOFF</b> — the kicker, where it landed, and the return. If the kick
       goes <b>out of bounds</b>, tap that flag: it books the 15-yard penalty on the
       kicking team and puts the ball on the receiving team's 35, with no return.</li>
@@ -2981,6 +2996,7 @@ function showHelp(){
       yards, the player, even the play type or which team ran it.</li>
       <li>Know the play number? <b>Plays</b> tab → type it → <b>Open it</b>.</li>
       <li>Missed one entirely? <b>Insert before it</b> slots a play into the middle.</li>
+      <li>Tagged the wrong defender? Tap him again — the code comes off.</li>
       <li><b>Fix down / spot</b> on the Game tab resets the situation whenever the app
       and the chain gang disagree. Use it without worrying — it does not touch any
       stats.</li>
