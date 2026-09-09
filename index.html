@@ -540,7 +540,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.09-39';
+const APP_VERSION = '2026.09.09-40';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1280,6 +1280,10 @@ function typeDefaults(p, type){
 function startEntry(type){
   const g=game(); if(!g) return;
   const s=g.sit;
+  /* "Show everyone" reveals the whole roster for the play in front of you.
+     It is not a setting — one tap on one kick should not leave every later
+     kicker list showing all 24 names. */
+  UI.showAll = {};
   E = { type:type, p: typeDefaults({ id:DB.deviceId+'-'+uid(), dev:DB.deviceId, t:nowISO(),
         q:s.q, poss:s.poss, down:s.down, dist:s.dist, spot:s.spot, yds:0, def:[] }, type) };
   renderEntry();
@@ -1897,6 +1901,7 @@ function editPlay(id){
   if(copy.type==='sack'){ copy.type='pass'; copy.result='sack'; }
   else if(copy.type==='pass') copy.result = copy.int?'int':(copy.inc?'inc':'comp');
   if(copy.type==='pat') copy.patKind = copy.twoPt?'two':'kick';
+  UI.showAll = {};                       // an edit starts filtered too
   E={ type: copy.type==='sack'?'pass':copy.type, p:copy };
   switchView('game'); renderEntry();
   window.scrollTo(0,0);
