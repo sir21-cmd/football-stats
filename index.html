@@ -540,7 +540,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.08.30-37';
+const APP_VERSION = '2026.09.09-39';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -691,6 +691,11 @@ function playPoints(p){
   if(p.safety) add(p.safetyBy || (p.poss==='us'?'them':'us'), 2);
   return out;
 }
+/* Punts and kickoffs change hands by design. A fumble on one of them belongs
+   to the RETURN team, which is the side that does NOT have poss on the play. */
+const isKickPlay = p => p.type==='punt' || p.type==='kickoff';
+const fumbledBy = p => isKickPlay(p) ? (p.poss==='us' ? 'them' : 'us') : p.poss;
+
 function blankRow(num){ return {num:num, name:pname(num)}; }
 function bump(map,num,init){ const k=String(num); if(!map[k]) map[k]=Object.assign({num:k,name:pname(k)},init); return map[k]; }
 function rows(map){ return Object.values(map).sort((a,b)=>(parseInt(a.num,10)||999)-(parseInt(b.num,10)||999)); }
@@ -810,7 +815,15 @@ function computeStats(g){
           const s=bump(S.scoring,p.kicker,SC()); s.patAtt++; if(p.patGood) s.patMade++;
         }
       }
-      if(p.fum){ T.fumbles++; if(p.fumLost){ T.fumblesLost++; T.turnovers++; } }
+      if(p.fum){
+        if(isKickPlay(p)){
+          // we kicked it — the muff is theirs, so it is a takeaway, not a giveaway
+          if(p.fumLost) T.takeaways++;
+        } else {
+          T.fumbles++;
+          if(p.fumLost){ T.fumblesLost++; T.turnovers++; }
+        }
+      }
     }
     /* ---- their offense: yards against + our returns ---- */
     else {
@@ -825,7 +838,14 @@ function computeStats(g){
         if(sackAsRush()){ T.oppRushAtt++; T.oppRushYds += (p.yds||0); }
         else T.oppPassYds += (p.yds||0);
       }
-      if(p.int || p.fumLost) T.takeaways++;
+      if(isKickPlay(p)){
+        // they kicked it — the muff is our returner's, so we gave it away
+        if(p.fum){
+          T.fumbles++;
+          if(p.fumLost){ T.fumblesLost++; T.turnovers++; }
+        }
+      }
+      else if(p.int || p.fumLost) T.takeaways++;
       if(p.type==='punt'){
         if(p.returner!=null && p.returner!==''){
           const r=bump(S.puntRet,p.returner,KR());
@@ -1432,7 +1452,8 @@ function formHTML(g){
     if(isPunt && !ours) fl.push({k:'fairCatch',label:'Fair catch',on:p.fairCatch},
                                 {k:'blocked',label:usName()+' blocked it',on:p.blocked,kind:'good'});
     if(!isPunt) fl.push({k:'onside',label:'Onside',on:p.onside},
-                        {k:'recovered',label:(ours?usName():themName())+' recovered',on:p.recovered});
+                        {k:'recovered',label:(ours?usName():themName())+' recovered',on:p.recovered},
+                        {k:'oob',label:'Out of bounds',on:p.oob,kind:'danger'});
     if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
                       {k:'fum',label:'Muffed/fumble',on:p.fum},
                       {k:'fumLost',label:'Lost it',on:p.fumLost,kind:'danger'});
@@ -1539,6 +1560,12 @@ function previewHTML(){
     const tmp = Object.assign({}, p, {yds:m.yds, retYds:m.retYds});
     const res = nextSit({q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot}, tmp);
     const bits = [`${m.yds} yd ${isPunt?'punt':'kickoff'}`];
+    if(!isPunt && p.oob){
+      // say the consequence out loud before it is saved
+      bits.push('out of bounds', '15 yd penalty on ' + (p.poss==='us'?usName():themName()));
+      bits.push(`${res.poss==='us'?usName():themName()} ball at ${spotLabel(res.spot)}`);
+      return `<div class="warnbox" style="margin:10px 0">${esc(bits.join(' · '))}</div>`;
+    }
     if(m.retYds) bits.push(`${m.retYds} yd return`);
     if(p.touchback) bits.push('touchback');
     if(isPunt && p.poss==='us' && !p.touchback && m.end!=null && m.end>=80) bits.push('inside the 20');
@@ -1579,6 +1606,15 @@ function commitPlay(){
     const m=kickMath(p);
     p.yds=m.yds; p.retYds=m.retYds;
     if(p.type==='punt' && p.poss==='us') p.inside20 = !p.touchback && !p.retTd && m.end>=80;
+  }
+  /* A kickoff out of bounds is a dead ball and a foul on the kicking team.
+     Nothing can be returned, recovered or muffed on it, so clear all of that
+     and book the 15 yards against whoever kicked it. */
+  if(p.type==='kickoff' && p.oob){
+    p.retYds=0; p.returner=null; p.retTd=false; p.touchback=false;
+    p.recovered=false; p.onside=false;
+    p.fum=false; p.fumLost=false;
+    p.penYds=15; p.penOn=p.poss; p.declined=false;
   }
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
@@ -1649,6 +1685,9 @@ function nextSit(sit, p){
   // NFHS: every touchback comes out to the 20 — kickoff or punt alike.
   // (NCAA puts kickoff touchbacks on the 25; high school does not.)
   const recvTouchbackSpot = kickingTeam => kickingTeam==='us' ? 80 : 20;
+  /* Kickoff out of bounds: 15 yards on from the touchback spot, so the
+     receiving team starts on its own 35. */
+  const recvOobSpot = kickingTeam => kickingTeam==='us' ? 65 : 35;
   if(p.type==='penalty'){
     // the penalised team always loses ground; work in "yards gained by the offense"
     const onOffense = (p.penOn === p.poss);
@@ -1680,13 +1719,19 @@ function nextSit(sit, p){
     return s;
   }
   if(p.type==='kickoff'){
+    // out of bounds is a dead ball — no return, no recovery, straight to the 35
+    if(p.oob){
+      const sp = recvOobSpot(p.poss);
+      return {q:s.q, poss: opp, spot: sp, down:1, dist:10};
+    }
     let landing = p.poss==='us' ? clamp(sit.spot+(p.yds||0),0,100) : clamp(sit.spot-(p.yds||0),0,100);
     let sp;
     if(p.touchback) sp = recvTouchbackSpot(p.poss);
     else sp = p.poss==='us' ? clamp(landing-(p.retYds||0),1,99) : clamp(landing+(p.retYds||0),1,99);
     if(p.retTd){ const sc=p.scoreBy||opp; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
     s = flipPoss({q:s.q,poss:p.poss,spot:sp}, sp);
-    if(p.recovered) s.poss = p.poss;
+    if(p.recovered) s.poss = p.poss;   // onside kick the kicking team came down with
+    if(p.fumLost) s.poss = p.poss;     // return team muffed it back, same as a punt
     return s;
   }
   // scrimmage play
@@ -1789,6 +1834,7 @@ function playText(p){
       if(p.retYds||p.returner) s += (p.returner? `, ${who(p.returner)} return ${p.retYds||0}` : `, return ${p.retYds||0}`);
       if(p.fairCatch) s+=', fair catch'; if(p.touchback) s+=', touchback'; break;
     case 'kickoff': s = our ? `${who(p.kicker)||'Kickoff'} kicks off ${p.yds||0}` : `${side}kicks off ${p.yds||0}`;
+      if(p.oob){ s += ' — out of bounds, 15 yd penalty, ball on the 35'; break; }
       if(p.retYds||p.returner) s += (p.returner? `, ${who(p.returner)} return ${p.retYds||0}` : `, return ${p.retYds||0}`);
       if(p.touchback) s+=', touchback'; break;
     case 'fg': s = `${our?(who(p.kicker)+' '):side}${p.fgDist||0} yd FG ${p.fgGood?'GOOD':'no good'}`; break;
@@ -2833,7 +2879,9 @@ function showHelp(){
     <ul>
       <li><b>PUNT</b> — the punter, how far, and whether it was returned. Tap the field
       picture to place where it landed.</li>
-      <li><b>KICKOFF</b> — the kicker, where it landed, and the return.</li>
+      <li><b>KICKOFF</b> — the kicker, where it landed, and the return. If the kick
+      goes <b>out of bounds</b>, tap that flag: it books the 15-yard penalty on the
+      kicking team and puts the ball on the receiving team's 35, with no return.</li>
       <li><b>FIELD GOAL</b> — the kicker and the distance, good or no good.</li>
       <li><b>Extra point / 2-pt</b> — the app usually offers this on its own right
       after a touchdown, so you rarely tap it yourself.</li>
