@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-49';
+const APP_VERSION = '2026.09.10-50';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2275,6 +2275,15 @@ function wire(){
     // mid-entry this should change the play you're working on, not just the game state
     if(E && UI.editingId) return switchPoss(b.dataset.poss);
     g.sit.poss=b.dataset.poss;
+    /* Before the first play is logged, this toggle is choosing who kicks off —
+       so move the ball to that team's own 40 (NFHS) and remember the change.
+       Once plays exist it is a correction, and the ball stays where it is. */
+    if(!g.plays.length){
+      g.kickoff = g.sit.poss;
+      g.sit.spot = g.sit.poss==='us' ? 40 : 60;
+      g.sit.down = 1; g.sit.dist = 10;
+      if(E){ E.p.spot = g.sit.spot; E.p.down = 1; E.p.dist = 10; }
+    }
     if(E) switchPoss(b.dataset.poss);
     save(); render(); };
 
