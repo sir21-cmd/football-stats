@@ -114,31 +114,64 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
   margin-bottom:8px; border-bottom:1px solid var(--line)}
 .switcher .seg button{min-height:34px; padding:6px 12px; font-size:.8rem}
 /* ---------- field strip ---------- */
-.gridiron{position:relative; height:42px; border-radius:8px; overflow:hidden;
-  background:#d8e3ec; border:1px solid #c3d0db; margin:10px 0 2px}
-.gridiron.tap{height:54px; margin:6px 0 8px; cursor:pointer; border-color:#94a3b8}
-.gridiron .fz{position:absolute; top:0; bottom:0; width:8.3333%; background:var(--ink2);
+/* =======================================================================
+   THE FIELD
+   Depth comes from a front edge and shading, never a transform, so a tap at
+   the 35 is still the 35. Same height and width as the strip it replaces:
+   the edge is absorbed inside, not added on top.
+   ======================================================================= */
+.fieldbox{position:relative; padding-top:17px; margin:6px 0 2px}
+.fchip{position:absolute; top:0; transform:translateX(-50%); z-index:6;
+  background:var(--ink); color:#fff; font-style:normal; font-size:.58rem; font-weight:800;
+  letter-spacing:.04em; padding:2px 7px; border-radius:999px; white-space:nowrap;
+  box-shadow:0 1px 3px rgba(15,23,42,.35)}
+.gridiron{position:relative; height:42px; border-radius:7px; overflow:hidden;
+  border:1px solid #1c5f34; margin:0}
+.gridiron.tap{height:54px; cursor:pointer}
+/* turf: mown stripes every ten yards, then a light-to-dark wash for depth */
+.gridiron .turf{position:absolute; left:0; right:0; top:0; bottom:6px;
+  background:repeating-linear-gradient(90deg,#2e8b4c 0 9.0909%,#35994f 9.0909% 18.1818%)}
+.gridiron .turf::after{content:''; position:absolute; inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(0,0,0,.20))}
+/* the front edge, inside the same height */
+.gridiron .edge{position:absolute; left:0; right:0; bottom:0; height:6px;
+  background:linear-gradient(180deg,#1f6b39,#17512b)}
+/* end zones — only as wide as the letters standing up in them */
+.gridiron .fz{position:absolute; top:0; bottom:6px; width:4.5455%; z-index:2;
   display:flex; align-items:center; justify-content:center}
 .gridiron .fz.l{left:0} .gridiron .fz.r{right:0}
-.gridiron .fz span{color:#fff; font-size:.5rem; font-weight:800; letter-spacing:.05em}
-.gridiron .fl{position:absolute; top:0; bottom:0; width:1px; background:#0f172a; opacity:.45}
-.gridiron .fl.mid{width:2px; opacity:.85}
+.gridiron .fz span{color:#fff; font-size:.5rem; font-weight:800; letter-spacing:.08em;
+  writing-mode:vertical-rl; text-orientation:upright; line-height:1}
+.gridiron .fz.us{background:var(--ink)} .gridiron .fz.us span{color:#f4b74a}
+.gridiron .fz.them{background:#5b6472}
+/* yard lines, hashes and numbers */
+.gridiron .fl{position:absolute; top:0; bottom:6px; width:1px; background:rgba(255,255,255,.45)}
+.gridiron .fl.mid{width:2px; background:rgba(255,255,255,.75)}
+.gridiron .fh{position:absolute; height:4px; width:1px; background:rgba(255,255,255,.45)}
 .gridiron .fn{position:absolute; top:50%; transform:translate(-50%,-50%); pointer-events:none;
-  font-size:.5rem; font-weight:800; color:#64748b; opacity:.6; letter-spacing:.02em; font-style:normal}
-.gridiron.tap .fn{font-size:.62rem; opacity:.55}
+  font-size:.5rem; font-weight:800; color:#fff; opacity:.65; font-style:normal}
+.gridiron.tap .fn{font-size:.6rem}
 @media(max-width:560px){ .gridiron .fn:not(.key){display:none} }
-.gridiron .flos{position:absolute; top:0; bottom:0; width:3px; margin-left:-1px; background:transparent;
-  background-image:repeating-linear-gradient(to bottom, #0f172a 0 4px, transparent 4px 7px)}
-.gridiron .ffd{position:absolute; top:0; bottom:0; width:3px; background:#eab308; box-shadow:0 0 0 1px #ffffff90}
-.gridiron .fball{position:absolute; top:50%; width:26px; height:26px; margin:-13px 0 0 -13px;
-  border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px #fff, 0 1px 4px #0f172a66;
-  display:flex; align-items:center; justify-content:center;
-  color:#fff; font-style:normal; font-size:.62rem; font-weight:800; letter-spacing:-.02em}
-.gridiron .fball::after{content:''; position:absolute; top:50%; margin-top:-4px; border:4px solid transparent}
-.gridiron .fball.r::after{left:28px; border-left-color:var(--accent)}
-.gridiron .fball.l::after{right:28px; border-right-color:var(--accent)}
-.gridiron.tap .fball{background:var(--go); width:30px; height:30px; margin:-15px 0 0 -15px; font-size:.7rem}
-.gridiron.tap .fball::after{display:none}
+/* markers */
+.gridiron .flos{position:absolute; top:0; bottom:6px; width:0; margin-left:-1px; z-index:4;
+  border-left:2px dashed rgba(15,23,42,.92)}
+.gridiron .ffd{position:absolute; top:0; bottom:6px; width:3px; background:#facc15; z-index:4;
+  box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.gridiron .fchain{position:absolute; height:3px; background:#fff; border-radius:2px; z-index:4;
+  box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.gridiron .fstick{position:absolute; width:9px; height:9px; margin:-4.5px 0 0 -4.5px;
+  border-radius:50%; background:#fff; z-index:5; box-shadow:0 1px 3px rgba(0,0,0,.4)}
+/* the ball is the badge — one marker, sitting on the line of scrimmage */
+.gridiron .fball{position:absolute; width:26px; height:26px; margin:-13px 0 0 -13px;
+  border-radius:50%; background:var(--ink) center/cover no-repeat;
+  background-image:url(data:image/png;base64,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);
+  box-shadow:0 0 0 2px #fff, 0 1px 4px rgba(15,23,42,.5); z-index:6; font-size:0}
+.gridiron .fball.them{background-image:none; background-color:#5b6472;
+  display:flex; align-items:center; justify-content:center; font-style:normal;
+  font-size:.82rem; font-weight:800; color:#fff; letter-spacing:0}
+.gridiron.tap .fball{width:30px; height:30px; margin:-15px 0 0 -15px;
+  background-image:none; background-color:var(--go); font-size:.7rem; font-weight:800;
+  font-style:normal; color:#fff; display:flex; align-items:center; justify-content:center}
 .fieldkey{display:flex; gap:12px; font-size:.62rem; color:var(--muted); margin:0 0 2px}
 .fieldkey b{font-weight:700}
 .penlist{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:6px}
@@ -543,7 +576,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-52';
+const APP_VERSION = '2026.09.10-57';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -971,8 +1004,11 @@ function qLabel(q){ return q<=4 ? 'Q'+q : (q===5?'OT':'OT'+(q-4)); }
    FIELD STRIP — a glanceable picture of where the ball is, and (on kicks)
    somewhere to tap. 120 units wide: two 10-yard end zones plus the field.
    ========================================================================= */
-function fieldPct(spot){ return (10 + clamp(spot,0,100)) / 120 * 100; }
-function spotFromPct(pct){ return clamp(Math.round(pct/100*120 - 10), 0, 100); }
+/* The picture is 110 units across: five of end zone at each end, a hundred of
+   football between them. Narrow zones leave more field for the yard lines. */
+const FIELD_EZ = 5, FIELD_SPAN = 110;
+function fieldPct(spot){ return (FIELD_EZ + clamp(spot,0,100)) / FIELD_SPAN * 100; }
+function spotFromPct(pct){ return clamp(Math.round(pct/100*FIELD_SPAN - FIELD_EZ), 0, 100); }
 function firstDownSpot(s){
   if(!s || s.down==null) return null;
   const fd = s.poss==='us' ? s.spot + s.dist : s.spot - s.dist;
@@ -993,9 +1029,13 @@ function fieldHTML(o){
   const flip = !!o.flip;
   const X = spot => (flip ? 100 - fieldPct(spot) : fieldPct(spot)).toFixed(3);
   const cls = ['gridiron']; if(o.pick) cls.push('tap');
-  let h = `<div class="${cls.join(' ')}"${o.pick?` data-fieldpick="${esc(o.pick)}"`:''}${flip?' data-flip="1"':''}>`;
-  h += `<div class="fz l"><span>${esc((flip?themShort():usShort()).slice(0,3))}</span></div>`;
-  h += `<div class="fz r"><span>${esc((flip?usShort():themShort()).slice(0,3))}</span></div>`;
+  let h = `<div class="fieldbox">`;
+  // the yard line rides above the badge, so it never sits on the turf
+  if(o.spot!=null) h += `<b class="fchip" style="left:${X(o.spot)}%">${esc(spotLabel(o.spot))}</b>`;
+  h += `<div class="${cls.join(' ')}"${o.pick?` data-fieldpick="${esc(o.pick)}"`:''}${flip?' data-flip="1"':''}>`;
+  h += `<div class="turf"></div>`;
+  h += `<div class="fz ${flip?'them':'us'} l"><span>${esc((flip?themShort():usShort()).slice(0,3))}</span></div>`;
+  h += `<div class="fz ${flip?'us':'them'} r"><span>${esc((flip?usShort():themShort()).slice(0,3))}</span></div>`;
   for(let y=10; y<=90; y+=10){
     const at = X(y);
     h += `<i class="fl${y===50?' mid':''}" style="left:${at}%"></i>`;
@@ -1004,14 +1044,31 @@ function fieldHTML(o){
     const key = (y===20 || y===50 || y===80) ? ' key' : '';
     h += `<b class="fn${key}" style="left:${at}%">${y<=50 ? y : 100-y}</b>`;
   }
-  if(o.los!=null)  h += `<i class="flos" style="left:${X(o.los)}%"></i>`;
-  if(o.fd!=null)   h += `<i class="ffd" style="left:${X(o.fd)}%"></i>`;
-  if(o.spot!=null){
-    const yl = Math.round(o.spot<=50 ? o.spot : 100-o.spot);   // the number painted on that yard line
-    const rightward = (o.poss!=='them') !== flip;              // which way this offence is driving
-    h += `<i class="fball ${rightward?'r':'l'}" style="left:${X(o.spot)}%">${yl}</i>`;
+  for(let y=5; y<=95; y+=5){
+    const at = X(y);
+    h += `<i class="fh" style="left:${at}%; top:22%"></i><i class="fh" style="left:${at}%; bottom:28%"></i>`;
   }
-  h += '</div>';
+  if(o.fd!=null)   h += `<i class="ffd" style="left:${X(o.fd)}%"></i>`;
+  // the run to the sticks, drawn between the ball and the line to gain
+  if(o.spot!=null && o.fd!=null){
+    const a = parseFloat(X(o.spot)), b = parseFloat(X(o.fd));
+    h += `<i class="fchain" style="left:${Math.min(a,b)}%; width:${Math.abs(b-a)}%; top:calc(50% - 3px)"></i>`;
+    h += `<i class="fstick" style="left:${b}%; top:calc(50% - 3px)"></i>`;
+  }
+  if(o.los!=null)  h += `<i class="flos" style="left:${X(o.los)}%"></i>`;
+  if(o.spot!=null){
+    const rightward = (o.poss!=='them') !== flip;              // which way this offence is driving
+    // On a picker the marker means "the spot you are choosing", so it stays a
+    // plain numbered dot. The crest is reserved for the ball actually in play.
+    // our crest only rides on our own ball; theirs carries their initial
+    const theirs = o.poss==='them';
+    const side = theirs ? ' them' : '';
+    const label = o.pick ? String(Math.round(o.spot<=50 ? o.spot : 100-o.spot))
+                : (theirs ? esc(themShort().slice(0,1)) : '');
+    h += `<i class="fball ${rightward?'r':'l'}${side}" style="left:${X(o.spot)}%; top:calc(50% - 3px)">${label}</i>`;
+  }
+  h += `<div class="edge"></div>`;
+  h += '</div></div>';
   return h;
 }
 function renderFieldStrip(){
@@ -1024,9 +1081,9 @@ function renderFieldStrip(){
   // the dotted line marks the line of scrimmage; the ball sits on it
   box.innerHTML = fieldHTML({ spot:s.spot, los:s.spot, fd:firstDownSpot(s), poss:s.poss, flip:flip }) +
     `<div class="fieldkey">
-     <span><b style="color:#1d4ed8">&#9679;</b> ball on ${esc(spotLabel(s.spot))}</span>
+     <span><b style="color:${s.poss==='us'?'#0f172a':'#5b6472'}">&#9679;</b> ball on ${esc(spotLabel(s.spot))}</span>
      <span><b>&#8942;</b> line of scrimmage</span>
-     <span><b style="color:#a16207">&#9474;</b> line to gain</span>
+     <span><b style="color:#eab308">&#9474;</b> line to gain</span>
      <span>${esc(s.poss==='us'?usName():themName())} driving ${rightward?'&rarr;':'&larr;'}</span>
      <span class="grow"></span>
      <button class="btn xs ghost" id="btnFlipField" title="Match the field you're looking at">&#8646; Flip sides</button>
@@ -1470,7 +1527,6 @@ function formHTML(g){
     h+=prev;
     h+=flagHTML([
       {k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},
-      {k:'fd', label:'1st down', on:p.fd},
       {k:'fum', label:'Fumble', on:p.fum},
       {k:'fumLost', label:'Fumble turnover', on:p.fumLost, kind:'danger'}
     ]);
@@ -1490,7 +1546,7 @@ function formHTML(g){
     h+=prev;
     // an incomplete pass can't be a score or a first down — don't offer it
     const fl=[];
-    if(p.result==='comp') fl.push({k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},{k:'fd', label:'1st down', on:p.fd});
+    if(p.result==='comp') fl.push({k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'});
     if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
     if(p.result==='int') fl.push({k:'retTd', label:'Returned for TD', on:p.retTd, kind:'danger'});
     h+=flagHTML(fl);
