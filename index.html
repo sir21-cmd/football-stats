@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.09-45';
+const APP_VERSION = '2026.09.10-47';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1286,9 +1286,23 @@ function defPanelHTML(){
    matching flag on — visibly, so it can still be overruled. Reversing the tag
    reverses the flag, but only if the tag is what set it. */
 function syncTurnoverFromTags(p){
-  if(!p || p.poss==='us') return;                       // our own offence
-  if(p.type==='punt' || p.type==='kickoff') return;     // kick muffs have their own rules
+  if(!p) return;
   const has = s => (p.def||[]).some(d=>d.s===s);
+  if(p.type==='punt' || p.type==='kickoff'){
+    /* Only our own players ever get tagged. So a recovery on a kick WE made can
+       only mean their returner put it on the ground and we came down with it.
+       On a kick THEY made it is ambiguous — our own returner may have fallen on
+       his own muff — so that one still wants the flag tapped by hand. */
+    if(p.poss==='us'){
+      if(has('FR')){
+        if(!p.fumLost){ p.fum=true; p.fumLost=true; p._toByTag=true; }
+      } else if(p._toByTag && p.fumLost){
+        p.fum=false; p.fumLost=false; delete p._toByTag;
+      }
+    }
+    return;
+  }
+  if(p.poss==='us') return;                             // our own offence
   if(has('FR')){
     if(!p.fumLost){ p.fum=true; p.fumLost=true; p._toByTag=true; }
   } else if(p._toByTag && p.fumLost){
@@ -1500,7 +1514,11 @@ function formHTML(g){
     if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
                       {k:'fum',label:'Muffed/fumble',on:p.fum},
                       {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
-    else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'});
+    else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'},
+                 // the same two tags as the other side of the ball — the app works
+                 // out who lost it from whose kick it was, so the words never change
+                 {k:'fum',label:'Muffed/fumble',on:p.fum},
+                 {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'good'});
     h+=flagHTML(fl);
     h+=prev;
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
@@ -2951,7 +2969,11 @@ function showHelp(){
       <li><b>PUNT</b> — the punter, how far, and whether it was returned. Tap the field
       picture to place where it landed. If the returner coughs it up, tap
       <b>Muffed/fumble</b> and <b>Fumble turnover</b>: the app charges the turnover to
-      the returning team, not the kicking team, and gives the ball back.</li>
+      the returning team, not the kicking team, and gives the ball back.
+      The same two tags appear whichever team kicked — the app works out who lost it
+      from whose kick it was. On <b>your own</b> kick you can skip them entirely and
+      just tag <b>FR</b> on the man who fell on it: only your players can be tagged, so
+      that can only mean their returner muffed it.</li>
       <li><b>KICKOFF</b> — the kicker, where it landed, and the return. If the kick
       goes <b>out of bounds</b>, tap that flag: it books the 15-yard penalty on the
       kicking team and puts the ball on the receiving team's 35, with no return.</li>
