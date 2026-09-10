@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-48';
+const APP_VERSION = '2026.09.10-49';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -817,6 +817,13 @@ function computeStats(g){
           const k=bump(S.kicking,p.kicker,KI()); k.pata++; if(p.patGood) k.patm++;
           const s=bump(S.scoring,p.kicker,SC()); s.patAtt++; if(p.patGood) s.patMade++;
         }
+      }
+      /* Scoop and score on our own kick: the man who recovered it is the man
+         who scored, so credit him rather than leaving six points unattributed. */
+      if(isKickPlay(p) && p.recTd){
+        const d=(p.def||[]).find(d=>d.s==='FR') || (p.def||[]).find(d=>d.s==='FC');
+        const who = p.returner || (d ? d.n : null);
+        if(who){ bump(S.scoring,who,SC()).tdMisc++; bump(S.defense,who,DS()).td++; }
       }
       if(p.fum){
         if(isKickPlay(p)){
@@ -1513,12 +1520,14 @@ function formHTML(g){
                         {k:'oob',label:'Out of bounds',on:p.oob,kind:'danger'});
     if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
                       {k:'fum',label:'Muffed/fumble',on:p.fum},
-                      {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
+                      {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'},
+                      {k:'recTd',label:'Recovered for TD',on:p.recTd,kind:'danger'});
     else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'},
                  // the same two tags as the other side of the ball — the app works
                  // out who lost it from whose kick it was, so the words never change
                  {k:'fum',label:'Muffed/fumble',on:p.fum},
-                 {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'good'});
+                 {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'good'},
+                 {k:'recTd',label:'Recovered for TD',on:p.recTd,kind:'good'});
     h+=flagHTML(fl);
     h+=prev;
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
@@ -1686,6 +1695,12 @@ function commitPlay(){
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
+  /* Scoop and score on a kick. The muff belongs to the return team, so the side
+     that recovers and scores is always the side that kicked it. */
+  if(p.recTd && (p.type==='punt' || p.type==='kickoff')){
+    p.fum=true; p.fumLost=true; p.retTd=false;
+    p.td=true; p.scoreBy = p.poss;
+  }
   if(p.type==='pat' || p.type==='fg') p.scoreBy = p.scoreBy || p.poss;
 
   // first down auto-detect for scrimmage plays
@@ -1781,6 +1796,7 @@ function nextSit(sit, p){
     if(p.touchback) sp = recvTouchbackSpot(p.poss);
     else sp = p.poss==='us' ? clamp(landing-(p.retYds||0),1,99) : clamp(landing+(p.retYds||0),1,99);
     if(p.retTd){ const sc=p.scoreBy||opp; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
+    if(p.recTd){ const sc=p.scoreBy||p.poss; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
     s = flipPoss({q:s.q,poss:p.poss,spot:sp}, sp);
     if(p.fumLost) s.poss = p.poss;  // return team muffed it back
     return s;
@@ -1796,6 +1812,7 @@ function nextSit(sit, p){
     if(p.touchback) sp = recvTouchbackSpot(p.poss);
     else sp = p.poss==='us' ? clamp(landing-(p.retYds||0),1,99) : clamp(landing+(p.retYds||0),1,99);
     if(p.retTd){ const sc=p.scoreBy||opp; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
+    if(p.recTd){ const sc=p.scoreBy||p.poss; return {q:s.q, poss:sc, spot: sc==='us'?97:3, down:1, dist:3}; }
     s = flipPoss({q:s.q,poss:p.poss,spot:sp}, sp);
     if(p.recovered) s.poss = p.poss;   // onside kick the kicking team came down with
     if(p.fumLost) s.poss = p.poss;     // return team muffed it back, same as a punt
@@ -1898,10 +1915,12 @@ function playText(p){
       break;
     case 'sack': s = our ? `${who(p.passer)} sacked for ${p.yds||0}` : `Sack for ${p.yds||0}`; break;
     case 'punt': s = our ? `${who(p.punter)||'Punt'} punts ${p.yds||0}` : `${side}punts ${p.yds||0}`;
+      if(p.recTd){ s += ' — muffed, recovered and returned for TD'; break; }
       if(p.retYds||p.returner) s += (p.returner? `, ${who(p.returner)} return ${p.retYds||0}` : `, return ${p.retYds||0}`);
       if(p.fairCatch) s+=', fair catch'; if(p.touchback) s+=', touchback'; break;
     case 'kickoff': s = our ? `${who(p.kicker)||'Kickoff'} kicks off ${p.yds||0}` : `${side}kicks off ${p.yds||0}`;
       if(p.oob){ s += ' — out of bounds, 15 yd penalty, ball on the 35'; break; }
+      if(p.recTd){ s += ' — muffed, recovered and returned for TD'; break; }
       if(p.retYds||p.returner) s += (p.returner? `, ${who(p.returner)} return ${p.retYds||0}` : `, return ${p.retYds||0}`);
       if(p.touchback) s+=', touchback'; break;
     case 'fg': s = `${our?(who(p.kicker)+' '):side}${p.fgDist||0} yd FG ${p.fgGood?'GOOD':'no good'}`; break;
@@ -2973,7 +2992,9 @@ function showHelp(){
       The same two tags appear whichever team kicked — the app works out who lost it
       from whose kick it was. On <b>your own</b> kick you can skip them entirely and
       just tag <b>FR</b> on the man who fell on it: only your players can be tagged, so
-      that can only mean their returner muffed it.</li>
+      that can only mean their returner muffed it. If he takes it in,
+      <b>Recovered for TD</b> does the whole play in one tap — the muff, the turnover,
+      six points, and the score credited to him.</li>
       <li><b>KICKOFF</b> — the kicker, where it landed, and the return. If the kick
       goes <b>out of bounds</b>, tap that flag: it books the 15-yard penalty on the
       kicking team and puts the ball on the receiving team's 35, with no return.</li>
