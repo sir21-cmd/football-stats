@@ -470,7 +470,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
           <button data-s="off" class="on">Offense</button>
           <button data-s="def">Defense</button>
           <button data-s="st">Special</button>
-          <button data-s="games">Games</button>
+          <button data-s="games">Team</button>
         </div>
         <span class="grow"></span>
         <button class="btn sm ghost" id="btnPrintSeason">Print</button>
@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-51';
+const APP_VERSION = '2026.09.10-52';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2793,7 +2793,6 @@ function renderSeason(){
     h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
     h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None', hideEmpty:true}));
     h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
-    h+=grp('Scoring', T(COLS.score, s.scoring, {empty:'None', hideEmpty:true}));
   }
   if(UI.seasonSide==='games'){
     let w=0,l=0,tt=0;
@@ -2818,6 +2817,9 @@ function renderSeason(){
       <tr><td>Takeaways</td><td class="num">${t.takeaways||0}</td></tr>
       <tr><td>Penalty yards</td><td class="num">${t.penYds||0}</td></tr>
       </tbody></table></div></div>`;
+    /* Scoring spans offence, defence and the kicking game, so it belongs with
+       the other whole-team tables — the same place the Stats tab keeps it. */
+    h+=grp('Scoring', T(COLS.score, s.scoring, {empty:'None', hideEmpty:true}));
   }
   h+='</div>';
   box.innerHTML=h;
