@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-50';
+const APP_VERSION = '2026.09.10-51';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2636,7 +2636,7 @@ function teamHTML(g,s,opts){
     ${line('Penalty yards', t.penYds, t.oppPenYds)}
     ${line('3rd down', t.thirdConv+'/'+t.thirdAtt, '—')}
     ${line('4th down', t.fourthConv+'/'+t.fourthAtt, '—')}
-    ${line('Sacks', t.sacksBy+' by us', t.sacksAllowed+' by them')}
+    ${line('Sacks', t.sacksBy, t.sacksAllowed)}
     </tbody></table></div></div>`;
   if(opts.scoringSummary!==false)
     h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet'})}</div>`;
