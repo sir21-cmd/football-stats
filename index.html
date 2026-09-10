@@ -576,7 +576,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-57';
+const APP_VERSION = '2026.09.10-58';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -858,7 +858,7 @@ function computeStats(g){
         const who = p.returner || (d ? d.n : null);
         if(who){ bump(S.scoring,who,SC()).tdMisc++; bump(S.defense,who,DS()).td++; }
       }
-      if(p.fum){
+      if(p.fum || p.fumLost){
         if(isKickPlay(p)){
           // we kicked it — the muff is theirs, so it is a takeaway, not a giveaway
           if(p.fumLost) T.takeaways++;
@@ -883,7 +883,7 @@ function computeStats(g){
       }
       if(isKickPlay(p)){
         // they kicked it — the muff is our returner's, so we gave it away
-        if(p.fum){
+        if(p.fum || p.fumLost){
           T.fumbles++;
           if(p.fumLost){ T.fumblesLost++; T.turnovers++; }
         }
@@ -1575,13 +1575,11 @@ function formHTML(g){
                         {k:'recovered',label:(ours?usName():themName())+' recovered',on:p.recovered},
                         {k:'oob',label:'Out of bounds',on:p.oob,kind:'danger'});
     if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
-                      {k:'fum',label:'Muffed/fumble',on:p.fum},
                       {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'},
                       {k:'recTd',label:'Recovered for TD',on:p.recTd,kind:'danger'});
     else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'},
                  // the same two tags as the other side of the ball — the app works
                  // out who lost it from whose kick it was, so the words never change
-                 {k:'fum',label:'Muffed/fumble',on:p.fum},
                  {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'good'},
                  {k:'recTd',label:'Recovered for TD',on:p.recTd,kind:'good'});
     h+=flagHTML(fl);
@@ -1748,6 +1746,7 @@ function commitPlay(){
   }
   syncTurnoverFromTags(p);        // in case the flag was never touched by hand
   delete p._toByTag;              // internal only — never saved onto a play
+  if(p.fumLost) p.fum = true;     // a turnover is a fumble; never store one without the other
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
@@ -3053,9 +3052,9 @@ function showHelp(){
   ${sec('Kicks, punts, extra points and penalties', `
     <ul>
       <li><b>PUNT</b> — the punter, how far, and whether it was returned. Tap the field
-      picture to place where it landed. If the returner coughs it up, tap
-      <b>Muffed/fumble</b> and <b>Fumble turnover</b>: the app charges the turnover to
-      the returning team, not the kicking team, and gives the ball back.
+      picture to place where it landed. If the returner coughs it up and loses it, tap
+      <b>Fumble turnover</b> — that one tag is the whole thing. The app charges the turnover
+      to the returning team, not the kicking team, and gives the ball back.
       The same two tags appear whichever team kicked — the app works out who lost it
       from whose kick it was. On <b>your own</b> kick you can skip them entirely and
       just tag <b>FR</b> on the man who fell on it: only your players can be tagged, so
