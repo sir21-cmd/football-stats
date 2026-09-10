@@ -543,7 +543,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-47';
+const APP_VERSION = '2026.09.10-48';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2731,8 +2731,10 @@ function seasonStats(){
     const s=computeStats(g);
     Object.keys(acc).forEach(k=>{
       s[k].forEach(r=>{
-        const dst = acc[k][r.num] || (acc[k][r.num]={num:r.num,name:r.name,gp:0});
-        dst.gp++;
+        /* No games-played column: the app knows who did something, not who
+           dressed, and counting appearances per category made a receiver's
+           "games" mean something different from a tackler's. */
+        const dst = acc[k][r.num] || (acc[k][r.num]={num:r.num,name:r.name});
         Object.keys(r).forEach(f=>{
           if(f==='num'||f==='name') return;
           if(f==='long'||f==='fgLong') dst[f]=Math.max(dst[f]||0, r[f]||0);
@@ -2750,22 +2752,20 @@ function renderSeason(){
   const box=$('#seasonBody');
   if(!DB.games.length){ box.innerHTML='<p class="empty">No games recorded yet.</p>'; return; }
   const s=seasonStats();
-  const GP={k:'gp',l:'GP'};
-  const withGP = cols => [cols[0],cols[1],GP].concat(cols.slice(2));
   let h='<div class="card">';
   if(UI.seasonSide==='off'){
-    h+=grp('Rushing', T(withGP(COLS.rush), s.rushing, {empty:'None', hideEmpty:true}));
-    h+=grp('Passing', T(withGP(COLS.pass), s.passing, {empty:'None', hideEmpty:true}));
-    h+=grp('Receiving', T(withGP(COLS.rec), s.receiving, {empty:'None', hideEmpty:true}));
+    h+=grp('Rushing', T(COLS.rush, s.rushing, {empty:'None', hideEmpty:true}));
+    h+=grp('Passing', T(COLS.pass, s.passing, {empty:'None', hideEmpty:true}));
+    h+=grp('Receiving', T(COLS.rec, s.receiving, {empty:'None', hideEmpty:true}));
   }
-  if(UI.seasonSide==='def') h+=grp('Defense', T(withGP(COLS.def), s.defense, {empty:'None', hideEmpty:true}));
+  if(UI.seasonSide==='def') h+=grp('Defense', T(COLS.def, s.defense, {empty:'None', hideEmpty:true}));
   if(UI.seasonSide==='st'){
-    h+=grp('Punt returns', T(withGP(COLS.ret), s.puntRet, {empty:'None', hideEmpty:true}));
-    h+=grp('Kickoff returns', T(withGP(COLS.ret), s.koRet, {empty:'None', hideEmpty:true}));
-    h+=grp('Punting', T(withGP(COLS.punt), s.punts, {empty:'None', hideEmpty:true}));
-    h+=grp('Kickoffs', T(withGP(COLS.ko), s.kickoffs, {empty:'None', hideEmpty:true}));
-    h+=grp('Place kicking', T(withGP(COLS.kick), s.kicking, {empty:'None', hideEmpty:true}));
-    h+=grp('Scoring', T(withGP(COLS.score), s.scoring, {empty:'None', hideEmpty:true}));
+    h+=grp('Punt returns', T(COLS.ret, s.puntRet, {empty:'None', hideEmpty:true}));
+    h+=grp('Kickoff returns', T(COLS.ret, s.koRet, {empty:'None', hideEmpty:true}));
+    h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
+    h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None', hideEmpty:true}));
+    h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
+    h+=grp('Scoring', T(COLS.score, s.scoring, {empty:'None', hideEmpty:true}));
   }
   if(UI.seasonSide==='games'){
     let w=0,l=0,tt=0;
