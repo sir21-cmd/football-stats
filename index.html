@@ -576,7 +576,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.10-58';
+const APP_VERSION = '2026.09.14-59';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -713,6 +713,33 @@ function flipPoss(sit, spot){
 /* =========================================================================
    STATS ENGINE — derives every MaxPreps stat line from the play log
    ========================================================================= */
+/* Yards the ball actually travels on a play from scrimmage.
+   A sack counts: it is stored with a negative p.yds and it moves the ball
+   backwards like any other loss. The entry screen renames a sacked pass to
+   type 'sack' before the situation is worked out, so both spellings are here. */
+function scrimGain(p){
+  if(p.type==='run' || p.type==='sack') return p.yds||0;
+  if(p.type==='pass') return (p.comp || p.result==='comp' || p.result==='sack') ? (p.yds||0) : 0;
+  return 0;
+}
+/* A safety, worked out from the play itself rather than from a flag the entry
+   screen happened to set — a play imported from another scorer's phone has
+   never been through that screen, and it still has to score. */
+function isSafety(p){
+  if(!p) return false;
+  if(p.safety) return true;
+  if((p.def||[]).some(d=>d.s==='SAF')) return true;
+  if(p.type!=='run' && p.type!=='pass' && p.type!=='sack') return false;
+  if(p.td || p.int || p.fumLost || p.spot==null) return false;
+  const end = clamp(p.spot + (p.poss==='us'?1:-1)*scrimGain(p), 0, 100);
+  return (p.poss==='us' && end<=0) || (p.poss==='them' && end>=100);
+}
+/* The two points belong to whichever side did NOT have the ball. */
+function safetyFor(p){ return p.safetyBy || (p.poss==='us' ? 'them' : 'us'); }
+/* Which side the points on a scoring play went to — a safety is the one case
+   where that is not the side holding the ball. */
+function scoredBy(p){ return isSafety(p) ? safetyFor(p) : (p.scoreBy || p.poss); }
+
 function playPoints(p){
   const out={us:0,them:0};
   const add=(who,n)=>{ if(who==='us') out.us+=n; else out.them+=n; };
@@ -724,7 +751,7 @@ function playPoints(p){
   // a defensive score counts on the board too, so the scoring summary's points
   // column can never drift from the scoreboard
   if(p.defTd && !p.td) add(p.defTdBy!=null ? (p.poss==='us'?'them':'us') : scorer, 6);
-  if(p.safety) add(p.safetyBy || (p.poss==='us'?'them':'us'), 2);
+  if(isSafety(p)) add(safetyFor(p), 2);
   return out;
 }
 /* Punts and kickoffs change hands by design. A fumble on one of them belongs
@@ -907,6 +934,15 @@ function computeStats(g){
         if(!who){ const d=(p.def||[]).find(d=>d.s==='INT'||d.s==='FR'); if(d) who=d.n; }
         if(who){ bump(S.scoring,who,SC()).tdMisc++; if(!p.returner) bump(S.defense,who,DS()).td++; }
       }
+    }
+
+    /* A safety we scored has to land on somebody's line, or the scoring
+       summary adds up to two fewer points than the scoreboard. If the SAF chip
+       was never tapped, whoever made the stop gets it. */
+    if(isSafety(p) && safetyFor(p)==='us' && !(p.def||[]).some(d=>d.s==='SAF')){
+      const d=(p.def||[]).find(d=>d.s==='TFL') || (p.def||[]).find(d=>d.s==='SK')
+           || (p.def||[]).find(d=>d.s==='T')   || (p.def||[]).find(d=>d.s==='A');
+      if(d){ bump(S.defense,d.n,DS()).saf++; bump(S.scoring,d.n,SC()).saf++; }
     }
 
     /* ---- our defense (recorded on any play) ---- */
@@ -1349,6 +1385,21 @@ function defPanelHTML(){
    ball. The tag is the thing the scorer actually taps, so let it turn the
    matching flag on — visibly, so it can still be overruled. Reversing the tag
    reverses the flag, but only if the tag is what set it. */
+/* A safety is two points for the DEFENCE and then a free kick, and it can
+   arrive two ways: the scorer taps SAF, or the runner is simply dropped in
+   his own end zone and the yardage says so. Either way the play has to carry
+   p.safety, because that is the only thing the scoreboard reads. */
+function syncSafetyFromTags(p){
+  if(!p) return;
+  /* isSafety() reads the play, not the flag, so this recomputes outright —
+     an edit that takes the loss or the SAF tag back off takes the points with
+     it. Stamped onto the play so the badge, the filter and the next situation
+     all agree with the scoreboard. */
+  delete p.safety;
+  if(isSafety(p)){ p.safety = true; p.safetyBy = safetyFor(p); }
+  else { p.safety = false; delete p.safetyBy; }
+}
+
 function syncTurnoverFromTags(p){
   if(!p) return;
   const has = s => (p.def||[]).some(d=>d.s===s);
@@ -1712,11 +1763,9 @@ function previewHTML(){
   else msg = sitText(res)+' · ball on '+spotLabel(res.spot);
   return `<div class="${cls}" style="margin:8px 0">${esc(msg)}</div>`;
 }
-function effectiveGain(p){
-  if(p.type==='run') return p.yds||0;
-  if(p.type==='pass') return (p.result==='comp'? (p.yds||0) : (p.result==='sack'? (p.yds||0) : 0));
-  return 0;
-}
+/* One definition, in core, so the situation and the scoreboard can never
+   disagree about how far the ball moved. */
+function effectiveGain(p){ return scrimGain(p); }
 
 /* ---------- saving ---------- */
 function commitPlay(){
@@ -1747,6 +1796,7 @@ function commitPlay(){
   syncTurnoverFromTags(p);        // in case the flag was never touched by hand
   delete p._toByTag;              // internal only — never saved onto a play
   if(p.fumLost) p.fum = true;     // a turnover is a fumble; never store one without the other
+  syncSafetyFromTags(p);          // two points, and a free kick to come
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
@@ -1837,6 +1887,12 @@ function nextSit(sit, p){
   }
   if(p.type==='note') return s;
 
+  /* After a safety the team that was pinned in its own end zone free-kicks
+     from its own 20 — it does NOT hand the other side a first down there.
+     Checked up front so it holds for a blocked punt out of the end zone too. */
+  const freeKick = () => ({q:s.q, poss:p.poss, spot: p.poss==='us'?20:80, down:1, dist:10});
+  if(p.safety) return freeKick();
+
   if(p.type==='pat' || (p.type==='fg')){
     // after any kick attempt the other team receives a kickoff
     s.poss = (p.type==='fg' && !p.fgGood) ? opp : (p.scoreBy==='us'?'us':'them');
@@ -1883,8 +1939,8 @@ function nextSit(sit, p){
     if(p.int && p.retYds) sp = p.poss==='us' ? clamp(res.spot-(p.retYds||0),1,99) : clamp(res.spot+(p.retYds||0),1,99);
     return flipPoss({q:s.q,poss:p.poss,spot:sp}, sp);
   }
+  if(res._safety) return freeKick();   // a safety outranks a turnover on downs
   if(res._downs) return flipPoss({q:s.q,poss:p.poss,spot:res.spot}, res.spot);
-  if(res._safety){ s.spot = p.poss==='us'?20:80; s.poss=opp; s.down=1; s.dist=10; }
   return s;
 }
 </script>
@@ -1984,6 +2040,8 @@ function playText(p){
     case 'penalty': s = `Penalty on ${p.penOn==='us'?usName():themName()} — ${p.penYds||0} yds${p.note?' ('+p.note+')':''}`; break;
     default: s = p.note||'Note';
   }
+  /* the printed scoring list has no badges, so the word has to be in the text */
+  if(isSafety(p)) s += ' — SAFETY, 2 pts';
   return s;
 }
 function playBadges(p){
@@ -1992,7 +2050,7 @@ function playBadges(p){
   if(p.fd) b+='<span class="badge fd">1ST</span>';
   if(p.int||p.fumLost) b+='<span class="badge to">TO</span>';
   if(p.type==='penalty') b+='<span class="badge pen">PEN</span>';
-  if(p.safety) b+='<span class="badge to">SAF</span>';
+  if(isSafety(p)) b+='<span class="badge to">SAF</span>';
   return b;
 }
 function defSummary(p){
@@ -2024,7 +2082,7 @@ function renderPlayList(){
   let list=g.plays.map((p,i)=>({p,i}));
   if(UI.playFilter==='us') list=list.filter(x=>x.p.poss==='us');
   if(UI.playFilter==='them') list=list.filter(x=>x.p.poss==='them');
-  if(UI.playFilter==='scores') list=list.filter(x=>x.p.td||(x.p.type==='fg'&&x.p.fgGood)||x.p.type==='pat'||x.p.safety);
+  if(UI.playFilter==='scores') list=list.filter(x=>x.p.td||(x.p.type==='fg'&&x.p.fgGood)||x.p.type==='pat'||isSafety(x.p));
   box.innerHTML = list.length ? list.reverse().map(x=>playHTML(x.p,x.i)).join('')
     : '<p class="empty">Nothing here yet.</p>';
 }
@@ -2696,7 +2754,7 @@ function teamHTML(g,s,opts){
   if(opts.scoringSummary!==false)
     h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet'})}</div>`;
   if(opts.scoringPlays!==false){
-    const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
+    const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||isSafety(p));
     if(sc.length) h+=`<div class="statgrp"><h3>Scoring plays</h3><div class="plays">`+
       sc.map(p=>playHTML(p,g.plays.indexOf(p))).join('')+'</div></div>';
   }
@@ -2704,10 +2762,10 @@ function teamHTML(g,s,opts){
 }
 /* Scoring plays as a clean numbered list — prints better than the play cards */
 function scoringListHTML(g){
-  const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||p.safety);
+  const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||isSafety(p));
   return `<div class="statgrp"><h3>Scoring plays</h3>`+(sc.length?
     '<ol class="small" style="margin:0; padding-left:20px">'+sc.map(p=>
-      `<li>${qLabel(p.q)} — <b>${esc(p.poss==='us'?usName():themName())}</b>: ${esc(playText(p))}</li>`).join('')+'</ol>'
+      `<li>${qLabel(p.q)} — <b>${esc(scoredBy(p)==='us'?usName():themName())}</b>: ${esc(playText(p))}</li>`).join('')+'</ol>'
     : '<p class="small muted">No scoring recorded.</p>')+'</div>';
 }
 
@@ -3046,6 +3104,11 @@ function showHelp(){
     interception on their play and the app gives you possession, ticks the turnover flag
     where you can see it, and moves the ball. Take the tag back off and it goes back to
     them. You do not need to set anything else.</div>
+    <div class="tipbox"><b>SAF puts two on the board.</b> It lives under <b>More</b>.
+    Tag it and the app adds the safety to the score, credits it to that player, and
+    sets up the free kick from their own 20. You can also just enter the loss — if
+    the yardage carries the runner into his own end zone the app works it out on its
+    own and gives the safety to whoever made the stop.</div>
     <div class="tipbox">You do not need to tag every play. Tag what your coaches
     actually want counted. Nothing breaks if a play has no defensive tag on it.</div>`)}
 
