@@ -576,7 +576,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.14-59';
+const APP_VERSION = '2026.09.14-61';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -759,6 +759,8 @@ function playPoints(p){
 const isKickPlay = p => p.type==='punt' || p.type==='kickoff';
 const fumbledBy = p => isKickPlay(p) ? (p.poss==='us' ? 'them' : 'us') : p.poss;
 
+/* Reserved key for a score that belongs to the team rather than to a player. */
+const TEAM_NUM = '';
 function blankRow(num){ return {num:num, name:pname(num)}; }
 function bump(map,num,init){ const k=String(num); if(!map[k]) map[k]=Object.assign({num:k,name:pname(k)},init); return map[k]; }
 function rows(map){ return Object.values(map).sort((a,b)=>(parseInt(a.num,10)||999)-(parseInt(b.num,10)||999)); }
@@ -869,8 +871,13 @@ function computeStats(g){
       else if(p.type==='pat'){
         if(p.twoPt){
           if(p.twoPtGood){
-            if(p.convType==='run' && p.rusher){ bump(S.scoring,p.rusher,SC()).convRun++; bump(S.rushing,p.rusher,RS()).conv++; }
-            if(p.convType==='pass' && p.receiver){ bump(S.scoring,p.receiver,SC()).convRec++; bump(S.receiving,p.receiver,CS()).conv++;
+            /* convType drives a pair of toggle buttons and can be absent on a
+               saved play — "Run" looks selected before it is ever tapped. Who
+               was actually named is the reliable signal, so fall back to that
+               rather than dropping two points off the summary. */
+            const kind = p.convType || (p.receiver ? 'pass' : (p.rusher ? 'run' : null));
+            if(kind==='run' && p.rusher){ bump(S.scoring,p.rusher,SC()).convRun++; bump(S.rushing,p.rusher,RS()).conv++; }
+            else if(kind==='pass' && p.receiver){ bump(S.scoring,p.receiver,SC()).convRec++; bump(S.receiving,p.receiver,CS()).conv++;
               if(p.passer) bump(S.passing,p.passer,PS()).conv++; }
           }
         } else {
@@ -943,6 +950,12 @@ function computeStats(g){
       const d=(p.def||[]).find(d=>d.s==='TFL') || (p.def||[]).find(d=>d.s==='SK')
            || (p.def||[]).find(d=>d.s==='T')   || (p.def||[]).find(d=>d.s==='A');
       if(d){ bump(S.defense,d.n,DS()).saf++; bump(S.scoring,d.n,SC()).saf++; }
+      else {
+        /* Nobody was tagged on the play at all. The two points still happened,
+           so they go to the team — a summary that quietly adds up to less than
+           the scoreboard is the one thing this column must never do. */
+        const r=bump(S.scoring,TEAM_NUM,SC()); r.name='Team safety'; r.saf++;
+      }
     }
 
     /* ---- our defense (recorded on any play) ---- */
@@ -979,7 +992,21 @@ function computeStats(g){
   const scorePts = r =>
       ((r.tdRun||0)+(r.tdRec||0)+(r.tdMisc||0))*6 + (r.patMade||0)
     + ((r.convRun||0)+(r.convRec||0)+(r.convDef||0))*2
-    + (r.fgMade||0)*3 + (r.saf||0)*2;
+    + (r.fgMade||0)*3 + (r.saf||0)*2 + (r.ptsExtra||0);
+
+  /* Last word on the scoring summary: it must total our final score. If a play
+     put points on the board that no player line could carry — nobody named on a
+     conversion, a defensive score with no tag — those points go to a Team row
+     rather than quietly going missing. This column is what gets keyed into
+     MaxPreps, so it is never allowed to read low. */
+  const scoreRows = rows(S.scoring);
+  const attributed = scoreRows.reduce((n,r)=>n+scorePts(r),0);
+  const missing = S.score.usTotal - attributed;
+  if(missing > 0){
+    const r = bump(S.scoring, TEAM_NUM, SC());
+    r.name = r.name || 'Team';
+    r.ptsExtra = (r.ptsExtra||0) + missing;
+  }
   return {
     rushing:fix(S.rushing), passing:fix(S.passing), receiving:fix(S.receiving),
     defense:rows(S.defense), scoring:rows(S.scoring).map(r=>{ r.pts=scorePts(r); return r; }),
@@ -1441,7 +1468,8 @@ function typeDefaults(p, type){
   if(type==='kickoff'){ if(!p.kicker) p.kicker=(UI.recent.kicker||[])[0]||null; initKickSpots(p, 55); }
   if(type==='fg'){ if(!p.kicker) p.kicker=(UI.recent.kicker||[])[0]||null;
     if(p.fgDist==null) p.fgDist=fgSuggest(p); if(p.fgGood==null) p.fgGood=true; }
-  if(type==='pat'){ if(!p.patKind) p.patKind='kick'; if(p.patGood==null) p.patGood=true; }
+  if(type==='pat'){ if(!p.patKind) p.patKind='kick'; if(p.patGood==null) p.patGood=true;
+    if(!p.convType) p.convType='run'; }   // match the button that renders selected
   if(type==='penalty'){ if(!p.penOn) p.penOn='us'; if(p.penYds==null) p.penYds=0; }
   return p;
 }
@@ -1861,6 +1889,12 @@ function commitPlay(){
   if(p.td && !wasEdit && g.status!=='final'){
     startEntry('pat'); E.p.poss = p.scoreBy; E.p.patKind='kick'; E.p.patGood=true;
     renderEntry(); toast('Touchdown — log the extra point');
+  }
+  /* A safety is two points and it wants a name on it. Say so while he is still
+     looking at the play, rather than letting him find a "Team" row on Sunday. */
+  else if(isSafety(p) && safetyFor(p)==='us' && !(p.def||[]).some(d=>d.s==='SAF')
+          && !(p.def||[]).length){
+    toast('Safety — 2 points. Tap the play to tag who made the stop.', 3200);
   }
   else toast(wasEdit ? 'Play updated' : 'Play saved');
 }
@@ -2609,7 +2643,12 @@ function onEntryClick(e){
     return renderEntry(); }
   const rs=t.closest('[data-res]'); if(rs){ p.result=rs.dataset.res; if(p.result==='inc') p.yds=0; return renderEntry(); }
   const fg=t.closest('[data-fg]'); if(fg){ p.fgGood = fg.dataset.fg==='1'; return renderEntry(); }
-  const pt=t.closest('[data-pat]'); if(pt){ p.patKind=pt.dataset.pat; return renderEntry(); }
+  /* "Run" shows as selected the moment 2-point is chosen, so store it too —
+     otherwise a conversion where he only picks the carrier saves with no type
+     on it and the scoring summary has nothing to hang the two points on. */
+  const pt=t.closest('[data-pat]'); if(pt){ p.patKind=pt.dataset.pat;
+    if(p.patKind==='two' && !p.convType) p.convType='run';
+    return renderEntry(); }
   const pg=t.closest('[data-pg]'); if(pg){ p.patGood = pg.dataset.pg==='1'; return renderEntry(); }
   const ct=t.closest('[data-ct]'); if(ct){ p.convType=ct.dataset.ct; return renderEntry(); }
   const tg=t.closest('[data-two]'); if(tg){ p.twoPtGood = tg.dataset.two==='1'; return renderEntry(); }
