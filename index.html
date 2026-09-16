@@ -310,6 +310,60 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
 @media(min-width:700px){ #modal{align-items:center} .modalbody{border-radius:16px; max-height:88vh} }
 .modalhead{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px}
 
+/* ---------- the clock sheet: one reading at each change of possession ---------- */
+.clksub{font-size:.82rem; color:var(--muted); text-align:center; margin:-2px 0 0}
+.clksub b{color:var(--ink2); font-weight:700}
+.clkdisp{margin:12px auto 4px; background:#f8fafc; border:2px solid var(--accent);
+  border-radius:12px; padding:8px 0; text-align:center; font-size:2.3rem; font-weight:800;
+  font-variant-numeric:tabular-nums; color:var(--accent); width:172px; letter-spacing:.02em}
+.clkdisp.empty{color:#cbd5e1; border-color:var(--line); letter-spacing:.06em}
+.clkdisp.bad{border-color:var(--bad); color:var(--bad)}
+.clkcaret{display:inline-block; width:3px; height:1.6rem; background:var(--accent);
+  vertical-align:-4px; margin-left:2px; border-radius:1px; animation:clkblink 1s step-end infinite}
+@keyframes clkblink{50%{opacity:0}}
+.clknote{text-align:center; font-size:.83rem; margin:8px 0 2px; color:var(--ink2); min-height:1.2em}
+.clknote b{color:var(--accent); font-weight:800}
+.clknote.warn{color:var(--bad); font-weight:700}
+.clknote.hold{color:var(--muted)}
+.clkpad{display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:12px 0 11px}
+.clkkey{background:#fff; border:1px solid var(--line); border-radius:12px; padding:13px 0;
+  text-align:center; font-size:1.35rem; font-weight:700; color:var(--ink); cursor:pointer;
+  user-select:none; -webkit-tap-highlight-color:transparent}
+.clkkey:active{background:#e2e8f0}
+.clkkey.alt{font-size:1rem; color:var(--muted); font-weight:700}
+.clkbtns{display:flex; gap:9px}
+.clkbtns .btn{flex:1}
+
+/* ---------- time of possession ---------- */
+.topsplit{display:flex; height:28px; border-radius:7px; overflow:hidden; gap:2px; margin:4px 0 0}
+.topseg{display:flex; align-items:center; padding:0 9px; color:#fff; font-size:.76rem;
+  font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden}
+.topseg.us{background:#2a78d6; border-radius:7px 2px 2px 7px}
+.topseg.them{background:#eb6834; justify-content:flex-end; border-radius:2px 7px 7px 2px}
+.topkey{display:flex; gap:15px; font-size:.76rem; color:var(--ink2); margin:7px 0 9px; flex-wrap:wrap}
+.topkey span{display:flex; align-items:center; gap:6px}
+.tdot{width:10px; height:10px; border-radius:3px; display:inline-block; flex:none}
+.tdot.us{background:#2a78d6} .tdot.them{background:#eb6834} .tdot.none{background:#cbd5e1}
+tr.topgap td{color:var(--warn)}
+td.num.short{color:var(--warn); font-weight:800}
+.topwarn{background:#fffbeb; border-left:4px solid var(--warn); padding:9px 12px;
+  border-radius:0 8px 8px 0; font-size:.83rem; margin-top:9px; color:var(--ink2)}
+.topok{color:var(--go); font-size:.82rem; font-weight:700; margin-top:9px}
+.timelist{margin-top:2px}
+.timerow{display:flex; align-items:center; gap:10px; padding:9px 4px; border-top:1px solid var(--line);
+  font-size:.86rem; cursor:pointer}
+.timerow:first-child{border-top:0}
+.timerow.head{color:var(--muted); cursor:default; font-size:.8rem}
+.timerow.gap{background:#fffbeb; color:var(--warn); font-weight:700; margin:0 -4px; padding-left:8px; padding-right:8px}
+.timerow .tt{width:56px; font-variant-numeric:tabular-nums; font-weight:800; flex:none}
+.timerow .tw{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.timerow .tr{color:var(--muted); font-size:.78rem; white-space:nowrap; flex:none}
+.timerow.gap .tr{color:var(--warn)}
+.topfoot{display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:.8rem;
+  border-top:2px solid var(--ink); margin-top:8px; padding-top:8px}
+.topfoot.short{border-top-color:var(--warn)}
+.topfoot span{display:flex; align-items:center; gap:6px}
+
 #toast{position:fixed; left:50%; transform:translateX(-50%); bottom:26px; z-index:80;
   background:var(--ink); color:#fff; padding:11px 18px; border-radius:24px; font-weight:600; font-size:.88rem;
   box-shadow:0 8px 24px #0f172a55; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; max-width:90vw; text-align:center}
@@ -527,6 +581,11 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
         <span><b>Charge sacks to the quarterback's rushing</b><br>
         <span class="muted tiny">High school (NFHS) and MaxPreps count sack yardage as a rushing loss, not a passing loss. Leave this on unless your league does it the NFL way.</span></span>
       </label>
+      <label class="row small" style="align-items:flex-start; gap:9px; margin-top:10px">
+        <input type="checkbox" id="ruleTop" style="width:auto; min-height:0; margin-top:3px">
+        <span><b>Ask for the clock at each change of possession</b><br>
+        <span class="muted tiny">One number a drive — the app works out both teams' time itself. Turn it off on a night when there's nobody to call the clock; everything else keeps working.</span></span>
+      </label>
     </div>
 
     <div class="card">
@@ -576,7 +635,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.14-61';
+const APP_VERSION = '2026.09.16-62';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -708,6 +767,141 @@ function applyGain(sit, gain){
 }
 function flipPoss(sit, spot){
   return { q:sit.q, poss: sit.poss==='us'?'them':'us', spot: clamp(spot==null?sit.spot:spot,1,99), down:1, dist:10 };
+}
+
+/* =========================================================================
+   TIME OF POSSESSION
+
+   A play can carry p.clock — the game clock, in seconds remaining in the
+   quarter, read at the moment the play ended. That is a FACT ABOUT A MOMENT,
+   not a computed value, which is what makes it safe to edit any play at any
+   time: changing one reading only moves the two possessions either side of it.
+
+   Nothing is ever guessed. A quarter with a missing reading reports the gap
+   rather than inventing a number to close it.
+   ========================================================================= */
+function quarterSecs(){ return (DB && DB.rules && DB.rules.quarterSecs) || 720; }  // NFHS varsity 12:00
+/* On by default, but switchable — some Fridays there is nobody to call the
+   clock and the prompt is just one more thing in the way. */
+function trackTop(){ return !DB || !DB.rules || DB.rules.trackTop !== false; }
+
+/* "7:12" <-> 432. Entry is right-to-left like a scoreboard controller, so the
+   raw digits "712" also land on 7:12. */
+function clockToSecs(t){
+  if(t==null || t==='') return null;
+  if(typeof t === 'number') return Math.max(0, Math.round(t));
+  const s = String(t).trim();
+  if(s.indexOf(':')>=0){
+    const [m,ss] = s.split(':');
+    return Math.max(0, (parseInt(m,10)||0)*60 + (parseInt(ss,10)||0));
+  }
+  const d = s.replace(/\D/g,'');
+  if(!d) return null;
+  const mm = d.length>2 ? parseInt(d.slice(0,-2),10)||0 : 0;
+  return Math.max(0, mm*60 + (parseInt(d.slice(-2),10)||0));
+}
+function secsToClock(n){
+  if(n==null) return '—:——';
+  n = Math.max(0, Math.round(n));
+  return Math.floor(n/60) + ':' + String(n%60).padStart(2,'0');
+}
+/* a duration reads better without the leading zero minute on short drives */
+function secsToDur(n){
+  if(n==null) return '—';
+  n = Math.max(0, Math.round(n));
+  return Math.floor(n/60) + ':' + String(n%60).padStart(2,'0');
+}
+
+/* Does this play run the game clock? A PAT is untimed, and notes and penalties
+   are administrative — none of them can own a span of time. */
+const CLOCK_TYPES = ['run','pass','sack','punt','kickoff','fg'];
+const consumesClock = p => CLOCK_TYPES.indexOf(p.type) >= 0;
+
+/* Who accrues possession time during this play.
+   NFL Guide for Statisticians: on a kickoff, or on a free kick following a
+   safety, all time consumed is credited to the team that FIRST GAINS
+   POSSESSION of the kick — so a return belongs to the receiving side, not to
+   the side that kicked it. An onside kick the kicking team comes down with,
+   or a return the receiving team muffs back, therefore counts to the kicker. */
+function timeOwner(p){
+  const opp = p.poss==='us' ? 'them' : 'us';
+  if(p.type==='kickoff') return (p.recovered || p.fumLost) ? p.poss : opp;
+  return p.poss;
+}
+
+/* Does THIS play end a possession — the moment a clock reading belongs on?
+   Read off the play itself, never off what comes after it, so it gives the
+   same answer the instant a play is saved as it does months later. */
+function endsPossession(p){
+  if(!p || !consumesClock(p)) return false;
+  /* A kickoff does not end anything: the return is the front of the receiving
+     team's drive, and the clock has not moved since the score, so the reading
+     taken at the touchdown already marks where their possession starts. */
+  if(p.type==='kickoff') return false;
+  if(p.td || isSafety(p) || p.type==='fg' || p.type==='punt' || p.int || p.fumLost) return true;
+  return !!(p.sitAfter && p.sitAfter.poss && p.sitAfter.poss !== p.poss);   // turned over on downs
+}
+
+function possessionTime(g){
+  const QL = quarterSecs();
+  const plays = (g.plays || []);
+  const out = { us:0, them:0, unaccounted:0, byQuarter:{}, drives:[], gaps:[],
+                anyClock: plays.some(p => p.clock != null) };
+  if(!out.anyClock) return out;
+
+  for(let q=1; q<=4; q++){
+    const inQ = plays.filter(p => (p.q||1) === q);
+    if(!inQ.length) continue;
+    /* Only close a quarter at 0:00 once it is actually over — a live 4th
+       quarter must not be told it has already run its full twelve minutes. */
+    const closed = inQ.some(p => p.quarterEnd) || plays.some(p => (p.q||1) > q);
+    const qo = { us:0, them:0, unaccounted:0, len:QL, closed:closed, readings:0 };
+
+    const marks = [{ idx:-1, secs:QL }];
+    inQ.forEach((p,i) => { if(p.clock != null){ marks.push({ idx:i, secs:clamp(p.clock,0,QL), play:p }); qo.readings++; } });
+    if(closed) marks.push({ idx: inQ.length-1, secs:0, end:true });
+
+    for(let m=0; m<marks.length-1; m++){
+      const a = marks[m], b = marks[m+1];
+      const elapsed = a.secs - b.secs;
+      if(elapsed <= 0) continue;
+      const covered = inQ.slice(a.idx+1, b.idx+1).filter(consumesClock);
+      const owners = [];
+      covered.forEach(p => { const o = timeOwner(p); if(owners.indexOf(o)<0) owners.push(o); });
+
+      if(owners.length === 1){
+        qo[owners[0]] += elapsed;
+        const last = covered[covered.length-1];
+        out.drives.push({ q:q, poss:owners[0], start:a.secs, end:b.secs, secs:elapsed,
+                          plays:covered.length, result:driveResult(last, b.end) });
+      } else {
+        /* Two sides inside one span means a reading is missing between them.
+           Report it; never split the difference. */
+        qo.unaccounted += elapsed;
+        out.gaps.push({ q:q, secs:elapsed, plays:covered.length,
+                        after: a.play ? a.play.id : null, teams:owners });
+      }
+    }
+    /* A quarter with no readings at all is NOT twelve minutes of unaccounted
+       time — it is simply a quarter nobody timed. Saying "12:00 unaccounted"
+       for it buries the real gaps, which are the ones worth chasing. */
+    if(!qo.readings){ qo.noData = true; qo.us = qo.them = qo.unaccounted = 0; }
+    out.byQuarter[q] = qo;
+    out.us += qo.us; out.them += qo.them; out.unaccounted += qo.unaccounted;
+  }
+  return out;
+}
+
+function driveResult(p, quarterEnd){
+  if(!p) return '—';
+  if(p.td) return 'Touchdown';
+  if(isSafety(p)) return 'Safety';
+  if(p.type==='fg') return p.fgGood ? 'Field goal' : 'Missed FG';
+  if(p.type==='punt') return 'Punt';
+  if(p.type==='kickoff') return 'Kickoff';
+  if(p.int || p.fumLost) return 'Turnover';
+  if(quarterEnd) return 'End of quarter';
+  return 'Downs';
 }
 
 /* =========================================================================
@@ -1012,7 +1206,7 @@ function computeStats(g){
     defense:rows(S.defense), scoring:rows(S.scoring).map(r=>{ r.pts=scorePts(r); return r; }),
     puntRet:fix(S.puntRet), koRet:fix(S.koRet), punts:rows(S.punts),
     kickoffs:rows(S.kickoffs), kicking:rows(S.kicking),
-    team:T, score:S.score
+    team:T, score:S.score, top:possessionTime(g)
   };
 }
 function totalRow(list, keys){
@@ -1826,6 +2020,16 @@ function commitPlay(){
   if(p.fumLost) p.fum = true;     // a turnover is a fumble; never store one without the other
   syncSafetyFromTags(p);          // two points, and a free kick to come
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
+  /* A gain that reaches the end zone is a touchdown, whether or not the flag
+     was tapped. The situation already treats it as one — nextSit puts the ball
+     on the extra-point spot the moment the yardage says so — and without this
+     the app sets up the PAT and scores nothing, which is the worst of both.
+     Detected here rather than in the engine on purpose: a saved play whose
+     yardage overshoots must never have six points added to it after the fact. */
+  if((p.type==='run'||p.type==='pass') && !p.td && !p.int && !p.fumLost){
+    const tdRes = applyGain({poss:p.poss,down:p.down,dist:p.dist,spot:p.spot,q:p.q}, effectiveGain(p));
+    if(tdRes._td) p.td = true;
+  }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
   /* Scoop and score on a kick. The muff belongs to the return team, so the side
@@ -1884,19 +2088,29 @@ function commitPlay(){
   g.updatedAt=nowISO(); save();
   E=null;
   render();
-  // only chase the extra point on a newly logged touchdown — correcting an old
-  // one shouldn't ask again, and a final game isn't taking new plays at all
-  if(p.td && !wasEdit && g.status!=='final'){
-    startEntry('pat'); E.p.poss = p.scoreBy; E.p.patKind='kick'; E.p.patGood=true;
-    renderEntry(); toast('Touchdown — log the extra point');
-  }
-  /* A safety is two points and it wants a name on it. Say so while he is still
-     looking at the play, rather than letting him find a "Team" row on Sunday. */
-  else if(isSafety(p) && safetyFor(p)==='us' && !(p.def||[]).some(d=>d.s==='SAF')
-          && !(p.def||[]).length){
-    toast('Safety — 2 points. Tap the play to tag who made the stop.', 3200);
-  }
-  else toast(wasEdit ? 'Play updated' : 'Play saved');
+  /* Whatever normally happens after a save — chasing the extra point, or just
+     the toast. Held as a function because the clock sheet may come first. */
+  const finish = () => {
+    // only chase the extra point on a newly logged touchdown — correcting an old
+    // one shouldn't ask again, and a final game isn't taking new plays at all
+    if(p.td && !wasEdit && g.status!=='final'){
+      startEntry('pat'); E.p.poss = p.scoreBy; E.p.patKind='kick'; E.p.patGood=true;
+      renderEntry(); toast('Touchdown — log the extra point');
+    }
+    /* A safety is two points and it wants a name on it. Say so while he is still
+       looking at the play, rather than letting him find a "Team" row on Sunday. */
+    else if(isSafety(p) && safetyFor(p)==='us' && !(p.def||[]).some(d=>d.s==='SAF')
+            && !(p.def||[]).length){
+      toast('Safety — 2 points. Tap the play to tag who made the stop.', 3200);
+    }
+    else toast(wasEdit ? 'Play updated' : 'Play saved');
+  };
+
+  /* One reading per change of possession. Not on an edit — he is looking at an
+     old play, not the live clock — and not if this play already carries one. */
+  if(trackTop() && !wasEdit && g.status!=='final' && p.clock==null && endsPossession(p)){
+    askClock(p, finish);
+  } else finish();
 }
 
 /* work out the next down/distance/possession after a play */
@@ -1990,7 +2204,115 @@ function openModal(title, html, onOpen){
   $('#modal').classList.remove('hide');
   if(onOpen) onOpen($('#modalBody'));
 }
-function closeModal(){ $('#modal').classList.add('hide'); $('#modalBody').innerHTML=''; }
+function closeModal(){ $('#modal').classList.add('hide'); $('#modalBody').innerHTML=''; UI.clk=null; }
+
+/* =========================================================================
+   THE CLOCK SHEET
+
+   Asked once at each change of possession. One number — the app already knows
+   who has the ball, so it works out both sides itself. The sheet shows what
+   the reading DOES ("that drive: SHRINE 2:18") before you commit it, because a
+   fat-fingered 1:12 instead of 7:12 is obvious as a duration and invisible as
+   a time. Skip is a first-class answer: a blank is honest, a guess is not.
+   ========================================================================= */
+function clockContext(p){
+  const g = game(); if(!g) return null;
+  const q = p.q || 1;
+  const idx = g.plays.indexOf(p);
+  const out = { q:q, from:quarterSecs(), fromLabel:'start of quarter', plays:0, owner:null };
+  for(let i=idx-1; i>=0; i--){
+    const x = g.plays[i];
+    if((x.q||1) !== q) break;
+    if(x.clock != null){ out.from = x.clock; out.fromLabel = secsToClock(x.clock); out.fromIdx = i; break; }
+  }
+  const start = (out.fromIdx==null ? 0 : out.fromIdx + 1);
+  const covered = g.plays.slice(start, idx + 1).filter(x => (x.q||1)===q && consumesClock(x));
+  out.plays = covered.length;
+  const owners = [];
+  covered.forEach(x => { const o = timeOwner(x); if(owners.indexOf(o)<0) owners.push(o); });
+  out.owner = owners.length === 1 ? owners[0] : null;
+  return out;
+}
+
+function askClock(p, then){
+  const ctx = clockContext(p);
+  if(!ctx){ if(then) then(); return; }
+  UI.clk = { id:p.id, then:then || null, ctx:ctx,
+             digits: p.clock!=null ? String(Math.floor(p.clock/60)) + String(p.clock%60).padStart(2,'0') : '' };
+  openModal('Clock at change of possession', clockSheetHTML());
+}
+
+function clockSheetHTML(){
+  const s = UI.clk; if(!s) return '';
+  const ctx = s.ctx;
+  const secs = s.digits ? clockToSecs(s.digits) : null;
+  const ss = s.digits ? parseInt(s.digits.slice(-2),10) : 0;
+  const badSecs = s.digits.length >= 3 && ss > 59;
+  const tooLate = secs != null && secs > ctx.from;
+  const bad = badSecs || tooLate;
+
+  let disp, cls;
+  if(!s.digits){ disp = '--:--<span class="clkcaret"></span>'; cls = ' empty'; }
+  else if(s.digits.length < 3){ disp = '0:' + s.digits.padStart(2,'0') + '<span class="clkcaret"></span>'; cls=''; }
+  else if(badSecs){
+    /* show the digits exactly as typed — normalising 7:75 to 8:15 while telling
+       him 75 isn't a number of seconds is a confusing pair of messages */
+    disp = s.digits.slice(0,-2) + ':' + s.digits.slice(-2); cls = ' bad';
+  }
+  else { disp = secsToClock(secs); cls = bad ? ' bad' : ''; }
+
+  let note = '<span class="clknote hold">Tap the clock as it reads now</span>';
+  if(badSecs) note = `<span class="clknote warn">${esc(s.digits.slice(-2))} isn't a number of seconds</span>`;
+  else if(tooLate) note = `<span class="clknote warn">Later than ${esc(ctx.fromLabel)} — the clock only counts down</span>`;
+  else if(secs != null && s.digits.length >= 3){
+    const el = ctx.from - secs;
+    const who = ctx.owner==='us' ? usName() : ctx.owner==='them' ? themName() : null;
+    note = who
+      ? `<span class="clknote">That drive: <b>${esc(who)} ${secsToDur(el)}</b> · ${ctx.plays} ${plural(ctx.plays,'play')}</span>`
+      : `<span class="clknote">${secsToDur(el)} since the last reading</span>`;
+  }
+
+  const key = d => `<div class="clkkey" data-clkkey="${d}">${d}</div>`;
+  return `<p class="clksub">Q${ctx.q} · last reading <b>${esc(ctx.fromLabel)}</b></p>
+    <div class="clkdisp${cls}">${disp}</div>
+    ${note}
+    <div class="clkpad">
+      ${[1,2,3,4,5,6,7,8,9].map(key).join('')}
+      <div class="clkkey alt" data-clkkey="del">&#9003;</div>
+      ${key(0)}
+      <div class="clkkey alt" data-clkkey="clr">clr</div>
+    </div>
+    <div class="clkbtns">
+      <button class="btn" id="clkSkip">Skip</button>
+      <button class="btn p" id="clkSave"${(!s.digits || bad) ? ' disabled' : ''}>Save</button>
+    </div>
+    <p class="tiny muted" style="text-align:center; margin:9px 0 0">
+      Type 7 1 2 for 7:12. Skipping leaves this drive without a time — you can add it later.</p>`;
+}
+
+function clockKey(k){
+  const s = UI.clk; if(!s) return;
+  if(k==='del') s.digits = s.digits.slice(0,-1);
+  else if(k==='clr') s.digits = '';
+  else if(s.digits.length < 4) s.digits = (s.digits + k).replace(/^0+(?=\d{3})/,'');
+  $('#modalBody').innerHTML = clockSheetHTML();
+}
+
+function clockSave(){
+  const s = UI.clk; if(!s || !s.digits) return;
+  const g = game(); if(!g) return;
+  const secs = clockToSecs(s.digits), then = s.then;
+  const p = g.plays.find(x => x.id === s.id);
+  if(p){ p.clock = secs; g.updatedAt = nowISO(); save(); }
+  closeModal(); render();
+  if(then) then(); else toast('Clock ' + secsToClock(secs) + ' saved');
+}
+function clockClear(id){
+  const g = game(); if(!g) return;
+  const p = g.plays.find(x => x.id === id);
+  if(p){ delete p.clock; g.updatedAt = nowISO(); save(); }
+  closeModal(); render(); toast('Clock reading removed');
+}
 function askNumber(title, value, cb){
   openModal(title, `<div class="field"><input type="number" id="askN" value="${value||0}" inputmode="numeric"></div>
     <button class="btn p wide" id="askOK">OK</button>`, body=>{
@@ -2042,7 +2364,8 @@ function render(){
   if(UI.view==='season') renderSeason();
   if(UI.view==='setup'){ renderRoster(); renderGameList();
     $('#devName').value=DB.deviceName||''; $('#teamName').value=DB.team.name||'';
-    $('#ruleSack').checked = sackAsRush(); }
+    $('#ruleSack').checked = sackAsRush();
+    $('#ruleTop').checked = trackTop(); }
 }
 
 /* ---------- play descriptions ---------- */
@@ -2352,7 +2675,24 @@ function pickFile(cb){ filePickCB=cb; $('#filePick').value=''; $('#filePick').cl
 /* ---------- global events ---------- */
 function wire(){
   $$('#tabs .tab').forEach(b=> b.onclick=()=>switchView(b.dataset.view));
-  $('#modalClose').onclick=closeModal;
+  $('#modalClose').onclick=()=>{
+    const then = UI.clk && UI.clk.then;   // closing the clock sheet is a skip
+    closeModal();
+    if(then) then();
+  };
+
+  /* the clock sheet lives inside the modal, so one delegate covers the lot */
+  $('#modalBody').addEventListener('click', e=>{
+    if(!UI.clk) return;
+    const k=e.target.closest('[data-clkkey]'); if(k){ clockKey(k.dataset.clkkey); return; }
+    if(e.target.closest('#clkSave')) return clockSave();
+    if(e.target.closest('#clkSkip')){
+      const then = UI.clk.then; closeModal();
+      if(then) then(); else toast('Skipped — this drive has no time yet');
+      return;
+    }
+    if(e.target.closest('#clkClear')) return clockClear(UI.clk.id);
+  });
   $('#modal').onclick=e=>{ if(e.target.id==='modal') closeModal(); };
   $('#btnUndo').onclick=undoLast;
   $('#btnQtr').onclick=()=>{ const g=game(); if(!g) return; g.sit.q = g.sit.q>=5?1:g.sit.q+1; save(); render(); };
@@ -2410,6 +2750,9 @@ function wire(){
   $('#teamName').oninput=e=>{ DB.team.name=e.target.value; save(); renderTop(); };
   $('#btnPrintSeason').onclick=()=>window.print();
   $('#ruleSack').onchange=e=>{ DB.rules.sackAsRush=e.target.checked; save(); toast('Rule updated'); };
+  $('#ruleTop').onchange=e=>{ DB.rules.trackTop=e.target.checked; save();
+    toast(e.target.checked ? 'The app will ask for the clock at each change of possession'
+                           : 'Clock prompts off — times already recorded are kept', 2600); };
 
   $('#playFilter').onclick=e=>{ const b=e.target.closest('button'); if(!b) return;
     UI.playFilter=b.dataset.f; $$('#playFilter button').forEach(x=>x.classList.toggle('on',x===b)); renderPlayList(); };
@@ -2479,6 +2822,22 @@ function wire(){
   });
   $('#entry').addEventListener('input', e=>{
     const i=e.target.closest('[data-inp]'); if(i){ E.p[i.dataset.inp]=i.value; }
+  });
+
+  /* the times screen: open it from the stats tab, and tap any row to set or
+     change that reading */
+  $('#view-stats').addEventListener('click', e=>{
+    if(e.target.closest('#btnFixTimes')){
+      const g=game(); if(!g) return;
+      openModal('Fix times', timesHTML(g));
+      return;
+    }
+  });
+  $('#modalBody').addEventListener('click', e=>{
+    const row=e.target.closest('[data-timeid]'); if(!row || UI.clk) return;
+    const g=game(); if(!g) return;
+    const p=g.plays.find(x=>x.id===row.dataset.timeid); if(!p) return;
+    askClock(p, ()=>{ const gg=game(); if(gg) openModal('Fix times', timesHTML(gg)); });
   });
 
   $('#view-reports').addEventListener('click', e=>{
@@ -2756,10 +3115,107 @@ function renderStats(){
     h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None', hideEmpty:true}));
     h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
   }
-  if(UI.statSide==='team'){ h+=teamHTML(g,s); }
+  if(UI.statSide==='team'){ h+=topHTML(g,s)+teamHTML(g,s); }
   h+='</div>';
   box.innerHTML=h;
 }
+/* Time of possession, in the shape a coach reads it: the split, the quarters,
+   and — the part that makes it trustworthy — whether each quarter adds up. */
+function topHTML(g, s, opts){
+  opts = opts || {};
+  const t = s.top;
+  if(!t || !t.anyClock) return opts.hideEmpty ? '' :
+    `<div class="statgrp"><h3>Time of possession</h3>
+     <p class="small muted">No clock readings in this game yet. Tap the clock when the app
+     asks at a change of possession, and this fills in.</p></div>`;
+
+  const QL = quarterSecs();
+  const total = t.us + t.them;
+  const pct = n => total ? Math.round(n / total * 1000) / 10 : 0;
+  let h = `<div class="statgrp"><h3>Time of possession</h3>`;
+
+  h += `<div class="topsplit">
+      <div class="topseg us" style="flex:0 0 ${total ? (t.us/total*100).toFixed(2) : 50}%">${esc(usShort())} ${secsToDur(t.us)}</div>
+      <div class="topseg them" style="flex:0 0 ${total ? (t.them/total*100).toFixed(2) : 50}%">${secsToDur(t.them)} ${esc(themShort())}</div>
+    </div>
+    <div class="topkey"><span><i class="tdot us"></i>${esc(usName())} ${pct(t.us)}%</span>
+      <span><i class="tdot them"></i>${esc(themName())} ${pct(t.them)}%</span></div>`;
+
+  const qs = Object.keys(t.byQuarter).map(Number).sort((a,b)=>a-b);
+  const cell = (n,q) => `<td class="num">${t.byQuarter[q] && t.byQuarter[q].noData ? '—' : secsToDur(n)}</td>`;
+  const plays = side => (g.plays||[]).filter(p => consumesClock(p) && timeOwner(p)===side).length;
+  const rate = (secs, n) => n ? (secs/n).toFixed(1) : '—';
+
+  h += `<div class="tblwrap"><table>
+    <thead><tr><th>Team</th>${qs.map(q=>`<th>Q${q}</th>`).join('')}<th>Total</th><th>Plays</th><th>Sec/play</th></tr></thead>
+    <tbody>
+      <tr><td>${esc(usName())}</td>${qs.map(q=>cell(t.byQuarter[q].us,q)).join('')}<td class="num">${secsToDur(t.us)}</td><td class="num">${plays('us')}</td><td class="num">${rate(t.us, plays('us'))}</td></tr>
+      <tr><td>${esc(themName())}</td>${qs.map(q=>cell(t.byQuarter[q].them,q)).join('')}<td class="num">${secsToDur(t.them)}</td><td class="num">${plays('them')}</td><td class="num">${rate(t.them, plays('them'))}</td></tr>
+      ${t.unaccounted ? `<tr class="topgap"><td>Unaccounted</td>${qs.map(q=>cell(t.byQuarter[q].unaccounted,q)).join('')}<td class="num">${secsToDur(t.unaccounted)}</td><td class="num">—</td><td class="num">—</td></tr>` : ''}
+    </tbody>
+    <tfoot><tr><td>Quarter</td>${qs.map(q=>{
+      const qq=t.byQuarter[q]; const sum=qq.us+qq.them+qq.unaccounted;
+      if(qq.noData) return '<td class="num muted">not timed</td>';
+      const full = qq.closed && Math.abs(sum - QL) < 1;
+      return `<td class="num${qq.closed && !full ? ' short' : ''}">${secsToDur(sum)}</td>`;
+    }).join('')}<td class="num">${secsToDur(t.us+t.them+t.unaccounted)}</td><td class="num"></td><td class="num"></td></tr></tfoot>
+    </table></div>`;
+
+  /* The check. A closed quarter that does not come to 12:00 is missing a
+     reading — say which, rather than rounding the difference away. */
+  const shortQs = qs.filter(q => { const qq=t.byQuarter[q];
+    return qq.closed && !qq.noData && Math.abs((qq.us+qq.them+qq.unaccounted) - QL) >= 1; });
+  if(shortQs.length || t.gaps.length){
+    h += `<div class="topwarn"><b>${t.gaps.length ? t.gaps.length+' '+plural(t.gaps.length,'drive')+' without a clock reading' : 'Some time is unaccounted for'}.</b> `
+      + (shortQs.length ? `Q${shortQs.join(', Q')} ${shortQs.length===1?'does':'do'} not add up to ${secsToDur(QL)}. ` : '')
+      + `Nothing has been guessed — open <b>Fix times</b> to fill the gaps.</div>`;
+  } else if(qs.some(q=>t.byQuarter[q].closed)){
+    h += `<div class="topok">Every closed quarter adds up to ${secsToDur(QL)}.</div>`;
+  }
+  h += `<button class="btn sm noprint" id="btnFixTimes" style="margin-top:9px">Fix times</button>`;
+  return h + '</div>';
+}
+
+/* Every change of possession in the game, in order, with its reading. Gaps in
+   amber. This is the post-game cleanup screen — and the only place a reading
+   can be added to a play that was skipped at the time. */
+function timesHTML(g){
+  const s = computeStats(g), t = s.top, QL = quarterSecs();
+  const qs = [1,2,3,4].filter(q => (g.plays||[]).some(p => (p.q||1)===q));
+  if(!qs.length) return '<p class="empty">No plays yet.</p>';
+  let h = '';
+  qs.forEach(q => {
+    const qq = t.byQuarter[q] || { us:0, them:0, unaccounted:0, closed:false };
+    h += `<div class="card"><h3>Q${q} · changes of possession</h3><div class="timelist">`;
+    h += `<div class="timerow head"><span class="tt">${secsToDur(QL)}</span>
+            <span class="tw">Start of quarter</span><span class="tr">—</span></div>`;
+    let any = false;
+    (g.plays||[]).forEach(p => {
+      if((p.q||1)!==q || !endsPossession(p)) return;
+      any = true;
+      const who = timeOwner(p)==='us' ? usShort() : themShort();
+      const d = t.drives.find(x => x.q===q && x.end===p.clock);
+      h += `<div class="timerow${p.clock==null?' gap':''}" data-timeid="${esc(p.id)}">
+          <span class="tt">${p.clock==null ? '—:——' : secsToDur(p.clock)}</span>
+          <span class="tw">${esc(who)} ${esc(driveResult(p,false).toLowerCase())}</span>
+          <span class="tr">${p.clock==null ? 'tap to set' : (d ? esc((d.poss==='us'?usShort():themShort())+' '+secsToDur(d.secs)) : '')}</span>
+        </div>`;
+    });
+    if(!any) h += '<div class="timerow"><span class="tw muted">No changes of possession recorded.</span></div>';
+    if(qq.closed) h += `<div class="timerow head"><span class="tt">0:00</span>
+            <span class="tw">End of Q${q}</span><span class="tr">—</span></div>`;
+    h += '</div>';
+    const sum = qq.us + qq.them + qq.unaccounted;
+    h += `<div class="topfoot${qq.closed && Math.abs(sum-QL)>=1 ? ' short' : ''}">
+        <span><i class="tdot us"></i>${esc(usName())} <b>${secsToDur(qq.us)}</b></span>
+        <span><i class="tdot them"></i>${esc(themName())} <b>${secsToDur(qq.them)}</b></span>
+        ${qq.unaccounted ? `<span><i class="tdot none"></i>Unaccounted <b>${secsToDur(qq.unaccounted)}</b></span>` : ''}
+        <span class="grow right">${qq.closed ? secsToDur(sum)+' of '+secsToDur(QL) : 'in progress'}</span>
+      </div></div>`;
+  });
+  return h;
+}
+
 function teamHTML(g,s,opts){
   opts = opts || {};
   const t=s.team;
@@ -2840,6 +3296,7 @@ function gameReportHTML(g,s,opts){
       <b>${s.score.usTotal}&ndash;${s.score.themTotal}</b>${g.place?' at '+esc(g.place):''} on ${esc(g.date)}.
       ${esc(usName())} finished with ${s.team.totalYards} total yards — ${s.team.rushYds} rushing,
       ${s.team.passYds} passing — and ${s.team.firstDowns} first ${plural(s.team.firstDowns,'down')}.</p>`;
+  h+=topHTML(g,s,{hideEmpty:true});
   h+=teamHTML(g,s,{scoringSummary:false, scoringPlays:false});
   h+=scoringListHTML(g);
   h+=grp('Rushing', T(COLS.rush, s.rushing, P));
@@ -3150,6 +3607,31 @@ function showHelp(){
     own and gives the safety to whoever made the stop.</div>
     <div class="tipbox">You do not need to tag every play. Tag what your coaches
     actually want counted. Nothing breaks if a play has no defensive tag on it.</div>`)}
+
+  ${sec('Time of possession', `
+    <p>Whenever a play ends a possession — a punt, a turnover, a score, a field goal —
+    the app asks you for <b>the game clock</b>. One number. It already knows who has the
+    ball, so it works out both teams' time from that by itself.</p>
+    <p class="hstep"><b>Type it like a scoreboard.</b> Tap <b>7</b> <b>1</b> <b>2</b> and it
+    reads 7:12. Before you save it shows you what the reading <i>does</i> —
+    <i>"that drive: SHRINE 2:18 · 6 plays"</i> — so a mistyped 1:12 stands out as a
+    ridiculous drive length instead of hiding as a plausible time.</p>
+    <div class="tipbox"><b>The kickoff is never asked about.</b> A return belongs to the
+    team that catches it, and the clock is stopped from the score until the kick, so the
+    reading you take on the touchdown already marks where their possession starts. One
+    reading per score, not two.</div>
+    <p><b>Skip is a real answer.</b> If you miss one, tap Skip. That drive keeps every
+    other stat it has and simply carries no time. The app never invents a number.</p>
+    <p><b>Fixing it later.</b> Stats &rarr; Team &rarr; <b>Fix times</b> lists every change
+    of possession in the game with its reading, gaps in amber. Tap any row to set or change
+    it — on the bus, or the next morning with film. A clock reading is a fact about a
+    moment, so changing one only moves the two drives either side of it. Nothing else
+    about the play is touched.</p>
+    <div class="tipbox"><b>The check.</b> Each finished quarter has to add up to 12:00. If
+    it doesn't, the app tells you by how much and which drive is missing — rather than
+    handing you a total that is quietly wrong.</div>
+    <p>Don't want any of it? <b>Setup &rarr; Ask for the clock at each change of
+    possession</b> turns the prompt off. Times you have already recorded are kept.</p>`)}
 
   ${sec('Kicks, punts, extra points and penalties', `
     <ul>
