@@ -1,7 +1,11 @@
 /* Varsity Football Stats — offline service worker.
    index.html is network-first (so a re-upload reaches everyone next time they
    have signal) with a cache fallback; everything else is cache-first. */
-const VERSION = 'vfs-2026-08-15-2';
+/* Bump this whenever the shell changes. Two things follow from it: the browser
+   sees sw.js differ and installs the new worker, and `activate` below deletes
+   every cache that isn't this one — which is what stops a stale copy living on
+   a phone that has been in a pocket since the last game. */
+const VERSION = 'vfs-2026-09-16-1';
 const SHELL = [
   './',
   './index.html',
@@ -21,6 +25,12 @@ self.addEventListener('activate', e => {
       .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+/* The page asks a waiting worker to take over when the scorer taps Reload.
+   Never done on our own initiative — see the note in the boot script. */
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', e => {
