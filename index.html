@@ -222,7 +222,14 @@ table{border-collapse:collapse; width:100%; font-size:.86rem}
 th,td{padding:7px 9px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--line)}
 th{font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:800; background:#f8fafc; position:sticky; top:0}
 th:first-child,td:first-child{text-align:left}
-th:nth-child(2),td:nth-child(2){text-align:left}
+/* Column 2 is a player's name in a stat line, but a number in a box score —
+   so the left-align belongs to the stat tables only, not to every table. */
+.statbl th:nth-child(2),.statbl td:nth-child(2){text-align:left}
+.statbl td:nth-child(2){width:99%}          /* the name soaks up the slack */
+/* Box scores: a label column, then evenly spaced numbers, the way a box score
+   is read. Fixed layout stops one column swallowing all the free width. */
+.boxtbl{table-layout:fixed}
+.boxtbl th:first-child,.boxtbl td:first-child{width:24%; overflow:hidden; text-overflow:ellipsis}
 tbody tr:nth-child(even){background:#fbfcfe}
 td.num{font-variant-numeric:tabular-nums}
 tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
@@ -363,6 +370,21 @@ td.num.short{color:var(--warn); font-weight:800}
   border-top:2px solid var(--ink); margin-top:8px; padding-top:8px}
 .topfoot.short{border-top-color:var(--warn)}
 .topfoot span{display:flex; align-items:center; gap:6px}
+/* drive length */
+.dvrow{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:.8rem}
+.dvwho{width:52px; font-weight:800; font-size:.68rem; flex:none; letter-spacing:.02em;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dvwho.us{color:#2a78d6} .dvwho.them{color:#eb6834}
+.dvtrack{flex:1; min-width:40px; height:12px; background:#eef2f6; border-radius:4px; overflow:hidden}
+.dvfill{display:block; height:100%; border-radius:4px}
+.dvfill.us{background:#2a78d6} .dvfill.them{background:#eb6834}
+.dvsecs{width:42px; text-align:right; font-variant-numeric:tabular-nums; font-weight:700; flex:none}
+.dvres{width:118px; color:var(--muted); font-size:.7rem; flex:none; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap}
+/* the clock field inside a play being edited */
+.printonly{display:none}
+.clkedit{margin-top:14px; padding:11px 12px; border:2px solid var(--accent);
+  border-radius:11px; background:#f8fbff}
 
 #toast{position:fixed; left:50%; transform:translateX(-50%); bottom:26px; z-index:80;
   background:var(--ink); color:#fff; padding:11px 18px; border-radius:24px; font-weight:600; font-size:.88rem;
@@ -373,6 +395,7 @@ td.num.short{color:var(--warn); font-weight:800}
 @media print{
   .pagebreak{break-before:page; page-break-before:always}
   #top,#tabs,.noprint,#toast{display:none !important}
+  .printonly{display:inline !important}
   body{background:#fff}
   main{padding:0; max-width:none}
   .card,.sheet{box-shadow:none; border:0; padding:0; margin:0 0 10px}
@@ -635,7 +658,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.16-62';
+const APP_VERSION = '2026.09.16-65';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1924,6 +1947,30 @@ function formHTML(g){
     h+=`<div class="field" style="margin-top:12px"><label class="f">Note (optional)</label>
         <input type="text" data-inp="note" value="${esc(p.note||'')}" placeholder="bad snap, trick play, injury…"></div>`;
   }
+  /* Editing a play that ends a possession? The clock reading lives here, because
+     a reading is a fact about a moment — changing it only moves the two drives
+     either side of it, and touches nothing else about the play. */
+  if(UI.editingId && trackTop()){
+    const saved = (game().plays||[]).find(x=>x.id===UI.editingId);
+    if(saved && endsPossession(saved)){
+      const ctx = clockContext(saved);
+      const who = ctx && ctx.owner ? (ctx.owner==='us'?usName():themName()) : null;
+      h+=`<div class="clkedit">
+        <label class="f" style="color:var(--accent)">Clock at change of possession</label>
+        <div class="row tight" style="align-items:center">
+          <button class="btn" data-act="clockset" style="min-width:104px; font-variant-numeric:tabular-nums; font-size:1.15rem">
+            ${saved.clock==null ? '—:——' : esc(secsToClock(saved.clock))}</button>
+          <span class="tiny muted grow">${saved.clock==null
+            ? 'Not recorded — tap to set it'
+            : (who && ctx ? 'Drive: <b>'+esc(who)+' '+secsToDur(ctx.from - saved.clock)+'</b><br>'
+                 + esc(ctx.fromLabel)+' &rarr; '+esc(secsToClock(saved.clock))+' · '+ctx.plays+' '+plural(ctx.plays,'play')
+                 : 'Recorded')}</span>
+          ${saved.clock!=null ? '<button class="btn sm ghost" data-act="clockclear">Clear</button>' : ''}
+        </div>
+        <p class="tiny muted" style="margin:6px 0 0">Changing this only moves the two drives
+        either side of it. Yardage, players and tags are untouched.</p></div>`;
+    }
+  }
   h+=`<div class="row" style="margin-top:14px">
       <button class="btn go grow" data-act="save">${UI.editingId?'Save changes':'Save play'}</button>
       ${UI.editingId?'<button class="btn bad sm" data-act="delete">Delete</button>':''}
@@ -2939,6 +2986,19 @@ function onEntryClick(e){
     if(act.dataset.act==='cancel') return cancelEntry();
     if(act.dataset.act==='save')   return commitPlay();
     if(act.dataset.act==='delete') return deleteEditing();
+    /* the clock reading on a play being edited — opens the same sheet, and
+       redraws the form underneath so the new duration shows immediately */
+    if(act.dataset.act==='clockset'){
+      const g=game(); if(!g) return;
+      const saved=g.plays.find(x=>x.id===UI.editingId); if(!saved) return;
+      return askClock(saved, ()=>renderEntry());
+    }
+    if(act.dataset.act==='clockclear'){
+      const g=game(); if(!g) return;
+      const saved=g.plays.find(x=>x.id===UI.editingId); if(!saved) return;
+      delete saved.clock; g.updatedAt=nowISO(); save(); renderEntry();
+      return toast('Clock reading removed');
+    }
   }
   const ep=t.closest('[data-eposs]'); if(ep) return switchPoss(ep.dataset.eposs);
   const et=t.closest('[data-etype]'); if(et) return switchType(et.dataset.etype);
@@ -3034,7 +3094,7 @@ function T(cols, rows, opts){
     const blank = v => v==null || ['0','','0/0','0.0','—'].indexOf(String(v))>=0;
     cols = cols.filter(c => !c.opt || rows.some(r => !blank(c.f ? c.f(r) : r[c.k])));
   }
-  const wide = cols.length > 12 ? ' class="wide"' : '';
+  const wide = cols.length > 12 ? ' class="statbl wide"' : ' class="statbl"';
   const head = cols.map(c=>`<th title="${esc(c.t||c.l)}">${esc(c.l)}</th>`).join('');
   const body = rows.map(r=>'<tr>'+cols.map(c=>{
       const v = c.f? c.f(r) : r[c.k];
@@ -3124,10 +3184,13 @@ function renderStats(){
 function topHTML(g, s, opts){
   opts = opts || {};
   const t = s.top;
+  const changes = (g.plays||[]).filter(p => endsPossession(p)).length;
   if(!t || !t.anyClock) return opts.hideEmpty ? '' :
     `<div class="statgrp"><h3>Time of possession</h3>
-     <p class="small muted">No clock readings in this game yet. Tap the clock when the app
-     asks at a change of possession, and this fills in.</p></div>`;
+     <p class="small muted">No clock readings in this game yet. The app asks for the clock
+     at each change of possession while you score — or fill them in here afterwards.</p>
+     ${changes ? `<p class="small muted">This game has <b>${changes}</b> ${plural(changes,'change')} of possession waiting for a time.</p>
+     <button class="btn sm noprint" id="btnFixTimes">Fix times</button>` : ''}</div>`;
 
   const QL = quarterSecs();
   const total = t.us + t.them;
@@ -3146,7 +3209,7 @@ function topHTML(g, s, opts){
   const plays = side => (g.plays||[]).filter(p => consumesClock(p) && timeOwner(p)===side).length;
   const rate = (secs, n) => n ? (secs/n).toFixed(1) : '—';
 
-  h += `<div class="tblwrap"><table>
+  h += `<div class="tblwrap"><table class="boxtbl">
     <thead><tr><th>Team</th>${qs.map(q=>`<th>Q${q}</th>`).join('')}<th>Total</th><th>Plays</th><th>Sec/play</th></tr></thead>
     <tbody>
       <tr><td>${esc(usName())}</td>${qs.map(q=>cell(t.byQuarter[q].us,q)).join('')}<td class="num">${secsToDur(t.us)}</td><td class="num">${plays('us')}</td><td class="num">${rate(t.us, plays('us'))}</td></tr>
@@ -3168,12 +3231,38 @@ function topHTML(g, s, opts){
   if(shortQs.length || t.gaps.length){
     h += `<div class="topwarn"><b>${t.gaps.length ? t.gaps.length+' '+plural(t.gaps.length,'drive')+' without a clock reading' : 'Some time is unaccounted for'}.</b> `
       + (shortQs.length ? `Q${shortQs.join(', Q')} ${shortQs.length===1?'does':'do'} not add up to ${secsToDur(QL)}. ` : '')
-      + `Nothing has been guessed — open <b>Fix times</b> to fill the gaps.</div>`;
+      + `Nothing has been guessed. <span class="noprint">Open <b>Fix times</b> to fill the gaps.</span>`
+      + `<span class="printonly">Those drives carry no time.</span></div>`;
   } else if(qs.some(q=>t.byQuarter[q].closed)){
     h += `<div class="topok">Every closed quarter adds up to ${secsToDur(QL)}.</div>`;
   }
   h += `<button class="btn sm noprint" id="btnFixTimes" style="margin-top:9px">Fix times</button>`;
-  return h + '</div>';
+  h += '</div>';
+
+  /* Drive by drive. The single game number mostly restates first downs; this is
+     the part a coach can actually do something with. */
+  if(t.drives.length){
+    const longest = t.drives.reduce((n,d)=>Math.max(n,d.secs),1);
+    h += `<div class="statgrp"><h3>Drive length</h3>`;
+    t.drives.forEach(d=>{
+      const side = d.poss==='us' ? 'us' : 'them';
+      h += `<div class="dvrow">
+          <span class="dvwho ${side}">${esc(d.poss==='us'?usShort():themShort())}</span>
+          <span class="dvtrack"><span class="dvfill ${side}" style="width:${(d.secs/longest*100).toFixed(1)}%"></span></span>
+          <span class="dvsecs">${secsToDur(d.secs)}</span>
+          <span class="dvres">${esc(d.result)} · ${d.plays} ${plural(d.plays,'play')}</span>
+        </div>`;
+    });
+    const ours = t.drives.filter(d=>d.poss==='us');
+    if(ours.length){
+      const avg = Math.round(ours.reduce((n,d)=>n+d.secs,0)/ours.length);
+      const quick = ours.filter(d=>d.secs<90).length;
+      h += `<p class="small muted" style="margin:9px 0 0">${esc(usName())} averaged
+        <b>${secsToDur(avg)}</b> a drive${quick ? `, and ${quick} of them died inside 90 seconds` : ''}.</p>`;
+    }
+    h += '</div>';
+  }
+  return h;
 }
 
 /* Every change of possession in the game, in order, with its reading. Gaps in
@@ -3222,12 +3311,12 @@ function teamHTML(g,s,opts){
   // `strong` marks the derived rows (the averages) rather than injecting markup
   // into the label, which the escaper would print verbatim
   const line=(l,a,b,strong)=>`<tr${strong?' class="keyrow"':''}><td>${esc(l)}</td><td class="num">${esc(String(a))}</td><td class="num">${esc(String(b))}</td></tr>`;
-  let h=`<div class="statgrp"><h3>Score by quarter</h3><div class="tblwrap"><table>
+  let h=`<div class="statgrp"><h3>Score by quarter</h3><div class="tblwrap"><table class="boxtbl">
     <thead><tr><th>Team</th><th>1</th><th>2</th><th>3</th><th>4</th><th>OT</th><th>Final</th></tr></thead><tbody>
     <tr><td>${esc(usName())}</td>${s.score.us.map(v=>`<td class="num">${v}</td>`).join('')}<td class="num"><b>${s.score.usTotal}</b></td></tr>
     <tr><td>${esc(themName())}</td>${s.score.them.map(v=>`<td class="num">${v}</td>`).join('')}<td class="num"><b>${s.score.themTotal}</b></td></tr>
     </tbody></table></div></div>`;
-  h+=`<div class="statgrp"><h3>Team totals</h3><div class="tblwrap"><table>
+  h+=`<div class="statgrp"><h3>Team totals</h3><div class="tblwrap"><table class="boxtbl tot3">
     <thead><tr><th></th><th>${esc(usName())}</th><th>${esc(themName())}</th></tr></thead><tbody>
     ${line('First downs', t.firstDowns, t.oppFirstDowns)}
     ${line('Rushes', t.rushAtt, t.oppRushAtt)}
