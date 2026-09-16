@@ -386,6 +386,18 @@ td.num.short{color:var(--warn); font-weight:800}
 .clkedit{margin-top:14px; padding:11px 12px; border:2px solid var(--accent);
   border-radius:11px; background:#f8fbff}
 
+/* Update bar. Sits above the home indicator, never over the entry buttons for
+   longer than it takes to read, and never reloads on its own. */
+#updbar{position:fixed; left:10px; right:10px; z-index:70;
+  bottom:calc(14px + env(safe-area-inset-bottom));
+  background:var(--ink); color:#fff; border-radius:12px;
+  padding:10px 12px; display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+  box-shadow:0 8px 26px rgba(15,23,42,.38); font-size:.86rem; font-weight:600}
+#updbar #updmsg{flex:1; min-width:150px}
+#updbar .btn{min-height:36px; padding:6px 12px; font-size:.82rem}
+#updbar .btn.ghost{color:#cbd5e1; border-color:#ffffff33}
+@media print{ #updbar{display:none !important} }
+
 #toast{position:fixed; left:50%; transform:translateX(-50%); bottom:26px; z-index:80;
   background:var(--ink); color:#fff; padding:11px 18px; border-radius:24px; font-weight:600; font-size:.88rem;
   box-shadow:0 8px 24px #0f172a55; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; max-width:90vw; text-align:center}
@@ -645,6 +657,11 @@ td.num.short{color:var(--warn); font-weight:800}
   </section>
 </main>
 
+<div id="updbar" class="hide">
+  <span id="updmsg">A new version is ready</span>
+  <button class="btn sm p" id="updGo">Reload</button>
+  <button class="btn sm ghost" id="updLater">Later</button>
+</div>
 <div id="modal" class="hide"><div class="modalbody">
   <div class="modalhead"><h2 id="modalTitle">&nbsp;</h2><button class="btn sm ghost" id="modalClose">Close</button></div>
   <div id="modalBody"></div>
@@ -658,7 +675,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.16-65';
+const APP_VERSION = '2026.09.16-66';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -3869,10 +3886,88 @@ function init(){
 document.addEventListener('DOMContentLoaded', init);
 </script>
 <script>
-/* register the offline worker — only over http(s), so the standalone file still works */
+/* =========================================================================
+   OFFLINE WORKER + UPDATES
+
+   The app is one file served from GitHub Pages, so "deploying" means the
+   scorer uploads index.html and every device has to notice. It did not
+   reliably notice: the worker's cache key had not moved since August, and a
+   phone that had been in a pocket since the last game could paint a build
+   weeks old with no sign anything was wrong.
+
+   Two changes fix that. sw.js carries a VERSION that is bumped whenever the
+   shell changes, so installing it purges every older cache. And the page
+   itself now asks for an update when it comes back to the foreground, and
+   says so when one is ready.
+
+   What it deliberately does NOT do is reload on its own. A reload in the
+   middle of a play being entered would throw the entry away, and a stale
+   version is a far smaller problem than a lost touchdown. The scorer taps
+   when he is ready.
+   ========================================================================= */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    let waitingWorker = null;
+
+    const bar   = document.getElementById('updbar');
+    const showBar = () => { if (bar) bar.classList.remove('hide'); };
+    const hideBar = () => { if (bar) bar.classList.add('hide'); };
+
+    if (bar) {
+      document.getElementById('updLater').onclick = hideBar;
+      document.getElementById('updGo').onclick = () => {
+        hideBar();
+        try { if (waitingWorker) waitingWorker.postMessage({ type: 'SKIP_WAITING' }); } catch (e) {}
+        // reload regardless — the fresh page is fetched network-first anyway
+        setTimeout(() => location.reload(), 150);
+      };
+    }
+
+    /* The worker only tells us about a new build when sw.js ITSELF changes —
+       and the ordinary deploy is index.html alone, which leaves sw.js byte for
+       byte identical. So ask the real question directly: what version is the
+       server serving, and is it the one we are running? */
+    let lastCheck = 0;
+    const versionCheck = () => {
+      if (!navigator.onLine) return;
+      if (Date.now() - lastCheck < 600000) return;      // at most once every 10 min
+      lastCheck = Date.now();
+      fetch('./index.html?v=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.ok ? r.text() : null)
+        .then(t => {
+          if (!t) return;
+          const m = t.match(/APP_VERSION\s*=\s*'([^']+)'/);
+          if (m && m[1] !== APP_VERSION) {
+            const msg = document.getElementById('updmsg');
+            if (msg) msg.textContent = 'Version ' + m[1] + ' is ready — you have ' + APP_VERSION;
+            showBar();
+          }
+        })
+        .catch(() => {});
+    };
+
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      /* A sideline phone sits idle between games, so the only reliable moment
+         to look for a new build is when it is picked back up. */
+      const check = () => { try { reg.update(); } catch (e) {} versionCheck(); };
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      setTimeout(check, 4000);
+
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        waitingWorker = reg.waiting; showBar();
+      }
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          /* Only worth mentioning when a version is already on screen — on a
+             first ever visit there is nothing to update from. */
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            waitingWorker = nw; showBar();
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }
 </script>
