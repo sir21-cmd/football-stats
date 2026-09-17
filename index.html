@@ -230,6 +230,14 @@ th:first-child,td:first-child{text-align:left}
    is read. Fixed layout stops one column swallowing all the free width. */
 .boxtbl{table-layout:fixed}
 .boxtbl th:first-child,.boxtbl td:first-child{width:24%; overflow:hidden; text-overflow:ellipsis}
+/* Team totals is a box score with only two number columns, so 24% for the label
+   is far too mean: "Yards per rush", "Yards per play" and "Yards per completion"
+   all clipped to "Yards pe…" and became the same row. Here the label takes the
+   slack and wraps rather than truncating — on a phone these are the numbers a
+   coach reads off the sideline. */
+.boxtbl.tot3 th:first-child,.boxtbl.tot3 td:first-child{
+  width:auto; overflow:visible; text-overflow:clip; white-space:normal}
+.boxtbl.tot3 th:not(:first-child),.boxtbl.tot3 td:not(:first-child){width:24%}
 tbody tr:nth-child(even){background:#fbfcfe}
 td.num{font-variant-numeric:tabular-nums}
 tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
@@ -675,7 +683,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.16-78';
+const APP_VERSION = '2026.09.17-79';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -996,7 +1004,16 @@ const fumbledBy = p => isKickPlay(p) ? (p.poss==='us' ? 'them' : 'us') : p.poss;
 /* Reserved key for a score that belongs to the team rather than to a player. */
 const TEAM_NUM = '';
 function blankRow(num){ return {num:num, name:pname(num)}; }
-function bump(map,num,init){ const k=String(num); if(!map[k]) map[k]=Object.assign({num:k,name:pname(k)},init); return map[k]; }
+/* A jersey number that was never tagged must not become one.
+   `String(undefined)` is "undefined", and a punt logged without its punter came
+   out of the report as a stat line reading "undefined #undefined" — which looks
+   like a bug in the app rather than a gap in the book. Fold it into the team
+   row instead: the punt still counts, and the line says why it has no name. */
+function bump(map,num,init){
+  const k = (num==null || num==='') ? TEAM_NUM : String(num);
+  if(!map[k]) map[k] = Object.assign({num:k, name:pname(k) || (k===TEAM_NUM ? 'Team' : '')}, init);
+  return map[k];
+}
 function rows(map){ return Object.values(map).sort((a,b)=>(parseInt(a.num,10)||999)-(parseInt(b.num,10)||999)); }
 
 function computeStats(g){
@@ -1405,6 +1422,35 @@ function endQuarter(){
   g.updatedAt = nowISO(); save(); render();
   toast(qLabel(g.sit.q)+' — ends change, '+usName()+' now defend the '+(fieldFlipped()?'right':'left'));
 }
+/* Marking a game final has to close the quarter too.
+
+   Seen in his own book: all three real games are missing an End of Q4 marker —
+   he taps "End of quarter" between quarters, then finishes the game instead of
+   tapping it a fourth time, which is the natural thing to do. Nothing was ever
+   wrong with that until time of possession arrived, and a quarter that is not
+   closed has no 0:00 anchor: the stretch from the last clock reading to the end
+   of the game simply vanishes from the totals. Not flagged, not unaccounted —
+   gone. On a 2:00-to-go final drive that is two minutes of possession missing.
+
+   So when the game goes final, write the marker he would have tapped. It is an
+   ordinary note play, visible in the list and deletable, which matters for a
+   game called early on the mercy rule — the clock really did not reach 0:00
+   there, and he can remove it. It carries autoEnd so reopening the game takes
+   it back out again rather than leaving it stranded mid-quarter. */
+function closeQuarterOnFinal(g){
+  const q = g.sit && g.sit.q || 1;
+  const inQ = (g.plays||[]).filter(p => (p.q||1) === q);
+  if(!inQ.length) return false;                       // nothing played in it
+  if(inQ.some(p => p.quarterEnd)) return false;       // he already tapped it
+  if((g.plays||[]).some(p => (p.q||1) > q)) return false;  // not the last quarter
+  const at = {q:q, poss:g.sit.poss, down:g.sit.down, dist:g.sit.dist, spot:g.sit.spot};
+  g.plays.push({ id:DB.deviceId+'-'+uid(), dev:DB.deviceId, t:nowISO(), type:'note',
+    q:q, poss:g.sit.poss, down:g.sit.down, dist:g.sit.dist, spot:g.sit.spot,
+    def:[], note:'End of '+qLabel(q), quarterEnd:true, autoEnd:true,
+    sitBefore:at, sitAfter:Object.assign({}, at) });
+  return true;
+}
+
 /* A quarter that has run long is usually a quarter nobody advanced. */
 function quarterNudge(g){
   const q = g.sit.q || 1;
@@ -2955,16 +3001,26 @@ function finishGame(){
       $('#fBack',body).onclick=()=>{ download('football-stats-backup-'+todayStr()+'.json',
         JSON.stringify(Object.assign({kind:'vfstats.full'},DB),null,1)); toast('Backup saved'); };
       $('#fDone',body).onclick=()=>{
+        const closed = closeQuarterOnFinal(g);
         g.status='final'; g.finishedAt=nowISO(); g.updatedAt=nowISO();
         E=null; UI.editingId=null; saveNow(); closeModal(); render();
-        toast('Game marked final');
+        toast(closed ? 'Game marked final — '+qLabel(g.sit.q||1)+' closed out'
+                     : 'Game marked final');
       };
     });
 }
 function reopenGame(){
   const g=game(); if(!g) return;
+  /* Take back the marker finishing the game added on his behalf — he is about
+     to add plays to that quarter, and a "End of Q4" sitting in the middle of it
+     would close the quarter early and swallow everything after it. A marker he
+     tapped himself stays; that one he meant. */
+  const n = g.plays.length;
+  g.plays = g.plays.filter(p => !p.autoEnd);
   delete g.status; delete g.finishedAt; g.updatedAt=nowISO();
-  save(); render(); toast('Game reopened');
+  save(); render();
+  toast(g.plays.length < n ? 'Game reopened — '+qLabel(g.sit.q||1)+' is live again'
+                           : 'Game reopened');
 }
 
 function confirmBox(msg, cb){
