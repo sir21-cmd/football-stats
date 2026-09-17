@@ -675,7 +675,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.16-77';
+const APP_VERSION = '2026.09.16-78';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -3963,7 +3963,12 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
           /* Only worth mentioning when a version is already on screen — on a
              first ever visit there is nothing to update from. */
           if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-            waitingWorker = nw; showBar();
+            waitingWorker = nw;
+            /* The worker knows something changed but not what version it is, so
+               go and look — otherwise the bar reads "a new version is ready"
+               and leaves you wondering which one. */
+            lastCheck = 0; versionCheck();
+            showBar();
           }
         });
       });
