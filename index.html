@@ -238,6 +238,17 @@ th:first-child,td:first-child{text-align:left}
 .boxtbl.tot3 th:first-child,.boxtbl.tot3 td:first-child{
   width:auto; overflow:visible; text-overflow:clip; white-space:normal}
 .boxtbl.tot3 th:not(:first-child),.boxtbl.tot3 td:not(:first-child){width:24%}
+/* Time of possession: word labels, and a footer cell that reads "not timed"
+   instead of a time. Fixed columns clipped "Unaccounted" and let "not timed"
+   overflow on top of the Total next to it, so this one sizes to its content. */
+.boxtbl.toptbl{table-layout:auto}
+.boxtbl.toptbl th,.boxtbl.toptbl td{padding-left:7px; padding-right:7px}
+.boxtbl.toptbl th:first-child,.boxtbl.toptbl td:first-child{
+  width:auto; overflow:visible; text-overflow:clip}
+/* "not timed" is three times the width of the 12:00 it shares a row with, and
+   it is the one cell that decides whether the table fits a phone. Set smaller:
+   still a sentence, no longer the widest thing in the table. */
+.boxtbl.toptbl td.ntimed{font-size:.72rem; letter-spacing:-.01em}
 tbody tr:nth-child(even){background:#fbfcfe}
 td.num{font-variant-numeric:tabular-nums}
 tfoot td{font-weight:800; background:#f1f5f9; border-top:2px solid var(--ink)}
@@ -683,7 +694,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.17-79';
+const APP_VERSION = '2026.09.17-80';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -3282,7 +3293,12 @@ function topHTML(g, s, opts){
   const plays = side => (g.plays||[]).filter(p => consumesClock(p) && timeOwner(p)===side).length;
   const rate = (secs, n) => n ? (secs/n).toFixed(1) : '—';
 
-  h += `<div class="tblwrap"><table class="boxtbl">
+  /* Not a box score, whatever it looks like: the row labels are words rather
+     than jersey numbers ("Unaccounted"), and one footer cell says "not timed"
+     rather than a time. A box score's fixed columns turned both into a mess —
+     "Unaccou…" clipped, and "not timed" painted straight over the Total beside
+     it. So this table sizes to its content and scrolls if it must. */
+  h += `<div class="tblwrap"><table class="boxtbl toptbl">
     <thead><tr><th>Team</th>${qs.map(q=>`<th>Q${q}</th>`).join('')}<th>Total</th><th>Plays</th><th>Sec/play</th></tr></thead>
     <tbody>
       <tr><td>${esc(usName())}</td>${qs.map(q=>cell(t.byQuarter[q].us,q)).join('')}<td class="num">${secsToDur(t.us)}</td><td class="num">${plays('us')}</td><td class="num">${rate(t.us, plays('us'))}</td></tr>
@@ -3291,7 +3307,7 @@ function topHTML(g, s, opts){
     </tbody>
     <tfoot><tr><td>Quarter</td>${qs.map(q=>{
       const qq=t.byQuarter[q]; const sum=qq.us+qq.them+qq.unaccounted;
-      if(qq.noData) return '<td class="num muted">not timed</td>';
+      if(qq.noData) return '<td class="num muted ntimed">not timed</td>';
       const full = qq.closed && Math.abs(sum - QL) < 1;
       return `<td class="num${qq.closed && !full ? ' short' : ''}">${secsToDur(sum)}</td>`;
     }).join('')}<td class="num">${secsToDur(t.us+t.them+t.unaccounted)}</td><td class="num"></td><td class="num"></td></tr></tfoot>
