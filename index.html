@@ -411,6 +411,10 @@ td.num.short{color:var(--warn); font-weight:800}
 .dvtrack{flex:1 1 auto; min-width:34px; height:12px; background:#eef2f6; border-radius:4px; overflow:hidden}
 .dvfill{display:block; height:100%; border-radius:4px}
 .dvfill.us{background:#2a78d6} .dvfill.them{background:#eb6834}
+/* An overtime series has no clock, so there is no bar to draw. An empty grey
+   track would read as a drive that took no time, which is a different thing
+   from one that was never timed — a dashed rule says "nothing to measure". */
+.dvtrack.ot{background:none; border-bottom:1px dashed var(--line); height:1px; align-self:center}
 .dvsecs{width:38px; text-align:right; font-variant-numeric:tabular-nums; font-weight:700; flex:none}
 .dvres{width:112px; flex:none; color:var(--muted); font-size:.7rem;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -724,7 +728,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-94';
+const APP_VERSION = '2026.09.19-95';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -931,6 +935,43 @@ function endsPossession(p){
   return !!(p.sitAfter && p.sitAfter.poss && p.sitAfter.poss !== p.poss);   // turned over on downs
 }
 
+/* =========================================================================
+   OVERTIME
+
+   NFHS, which is what Michigan plays: each team gets ONE series from the
+   defence's 10, first and goal, four downs. A turnover ends the series where
+   it happens — the ball is dead, there is no return and no return touchdown.
+   After both teams have had a series the leader wins; level and they go
+   again. And it is UNTIMED: no game clock, so no time of possession and no
+   clock prompt, which is why everything above stops at the fourth quarter.
+
+   One grouping function, used twice: to draw the series in the drive chart,
+   and to work out when a round is over. */
+function otSeriesList(plays, q){
+  const out = [];
+  let cur = null;
+  (plays || []).filter(p => (p.q||1) === q && consumesClock(p)).forEach(p => {
+    if(!cur || cur.poss !== p.poss || cur.ended){
+      cur = { q:q, qEnd:q, poss:p.poss, secs:null, untimed:true,
+              plays:0, ended:false, result:'—' };
+      out.push(cur);
+    }
+    cur.plays++;
+    cur.ended  = endsPossession(p);
+    cur.result = driveResult(p, 0, cur.ended);
+  });
+  return out;
+}
+/* A round is done once both sides have completed a series in it. */
+function otRoundDone(plays, q){
+  const done = otSeriesList(plays, q).filter(s => s.ended);
+  return done.length >= 2 && done.some(s => s.poss==='us') && done.some(s => s.poss==='them');
+}
+/* First and goal on the defence's 10. We always attack 100, so their 10 is
+   the 90 when we have it and the 10 when they do. */
+function otSpot(poss){ return poss === 'us' ? 90 : 10; }
+function otSit(q, poss){ return { q:q, poss:poss, down:1, dist:10, spot:otSpot(poss) }; }
+
 function possessionTime(g){
   const QL = quarterSecs();
   const plays = (g.plays || []);
@@ -1015,6 +1056,15 @@ function possessionTime(g){
     a.qEnd   = b.qEnd;
     a.ended  = b.ended;
     out.drives.splice(i, 1);
+  }
+  /* Overtime series go on the end of the chart with no bar and no time — an
+     empty bar would read as a drive that took no time, which is a different
+     thing from one that was never timed. They are never stitched: in
+     overtime each series is a series by definition. */
+  for(let q = 5; q <= 12; q++){
+    const ot = otSeriesList(plays, q);
+    if(!ot.length) break;
+    ot.forEach(d => out.drives.push(d));
   }
   out.drives.forEach((d,i) => { d.n = i+1; });
 
@@ -1531,6 +1581,47 @@ function renderFieldStrip(){
      </div>`;
 }
 
+/* ---------- overtime ---------- */
+/* One question, asked once a round: who is on offence first. Everything after
+   it — spotting the 10, switching sides when a series ends, counting the
+   round out — the app does on its own. */
+function askOTFirst(q){
+  const label = q === 5 ? 'Overtime' : 'Overtime ' + (q - 4);
+  openModal(label + ' — who has it first?',
+    `<p class="small muted" style="margin:0 0 12px">Each team gets one series from the 10.
+      Four downs, first and goal. No clock.</p>
+     <div class="row" style="gap:9px">
+       <button class="btn p grow" data-otfirst="us">${esc(usName())}</button>
+       <button class="btn grow" data-otfirst="them">${esc(themName())}</button>
+     </div>`);
+}
+function startOT(q, poss){
+  const g = game(); if(!g) return;
+  closeModal();
+  g.sit = otSit(q, poss);
+  UI.qNudgeFor = null;
+  g.updatedAt = nowISO(); save(); render();
+  toast((q===5?'Overtime':'Overtime '+(q-4)) + ' — ' + (poss==='us'?usName():themName())
+        + ' ball, 1st & Goal at the 10', 3600);
+}
+/* Called after every play in overtime. When both teams have had their series
+   the round is over: ahead wins, level goes again. */
+function otAfterPlay(g, p){
+  const q = p.q || 1;
+  if(q < 5 || g.status === 'final') return false;
+  if(!otRoundDone(g.plays, q)) return false;
+  const sc = computeStats(g).score;
+  if(sc.usTotal !== sc.themTotal){
+    toast((sc.usTotal > sc.themTotal ? usName() : themName())
+          + ' win it ' + sc.usTotal + '–' + sc.themTotal + ' — mark the game final in Setup', 5000);
+    return true;
+  }
+  g.sit = { q:q+1, poss:g.sit.poss, down:1, dist:10, spot:g.sit.spot };
+  g.updatedAt = nowISO(); save(); render();
+  askOTFirst(q+1);
+  return true;
+}
+
 /* ---------- quarters ---------- */
 /* End of quarter: log a marker, move to the next one, and the field swaps ends
    on its own because the orientation follows the quarter. */
@@ -1549,6 +1640,27 @@ function endQuarter(){
      kick, and it is the side that did NOT kick off to start the game that kicks
      to start the second half — so the app knows where the ball belongs and had
      no business making him spot it by hand. */
+  /* Level at the end of the fourth is overtime, and overtime needs to know
+     who has it first — a coin toss the app cannot see. It asks once, then
+     spots the ball itself, the same way the second-half kickoff works.
+
+     Somebody ahead at the horn is not overtime at all, so the quarter goes
+     back to the 4th: the End of Q4 marker is what the time of possession
+     maths needs, but rolling the situation into a period that will never be
+     played would leave "OT" on the scoreboard of a finished game. */
+  if(from === 4){
+    const sc = computeStats(g).score;
+    if(sc.usTotal !== sc.themTotal){
+      g.sit.q = 4;
+      g.updatedAt = nowISO(); save(); render();
+      toast('Fourth quarter over — ' + (sc.usTotal > sc.themTotal ? usName() : themName())
+            + ' lead, so mark the game final in Setup', 4200);
+      return;
+    }
+    g.updatedAt = nowISO(); save(); render();
+    askOTFirst(5);
+    return;
+  }
   let half = false;
   if(from === 2){
     const opened = openingKick(g);
@@ -1815,6 +1927,9 @@ function flagHTML(list){
 /* Offered only once the turnover is on — you cannot run back a ball you did
    not come up with, and an extra flag on every snap of the night is a cost. */
 function scoopFlag(p, ours){
+  /* Never in overtime: the ball is dead the moment the defence has it, so
+     there is no return to record and no six points to award. */
+  if((p.q||1) >= 5) return null;
   return ours
     ? {k:'retTd', label:themName()+' returned it for TD', on:p.retTd, kind:'danger'}
     : {k:'retTd', label:'Returned for TD',                on:p.retTd, kind:'good'};
@@ -2105,7 +2220,7 @@ function formHTML(g){
       {k:'fum', label:'Fumble', on:p.fum},
       {k:'fumLost', label:'Fumble turnover', on:p.fumLost, kind:'danger'}
     ];
-    if(p.fumLost) fl.push(scoopFlag(p, ours));
+    if(p.fumLost){ const sf = scoopFlag(p, ours); if(sf) fl.push(sf); }
     h+=flagHTML(fl);
     h+=scoopHTML(p, ours);
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
@@ -2128,8 +2243,8 @@ function formHTML(g){
     if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
     /* A strip sack run back is the same play as a scoop and score off a run,
        so the flag belongs on every branch a fumble can be lost on. */
-    if((p.result==='comp'||p.result==='sack') && p.fumLost) fl.push(scoopFlag(p, ours));
-    if(p.result==='int') fl.push(scoopFlag(p, ours));
+    if((p.result==='comp'||p.result==='sack') && p.fumLost){ const sf = scoopFlag(p, ours); if(sf) fl.push(sf); }
+    if(p.result==='int'){ const sf = scoopFlag(p, ours); if(sf) fl.push(sf); }
     h+=flagHTML(fl);
     h+=scoopHTML(p, ours);
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
@@ -2156,10 +2271,12 @@ function formHTML(g){
     if(!isPunt) fl.push({k:'onside',label:'Onside',on:p.onside},
                         {k:'recovered',label:(ours?usName():themName())+' recovered',on:p.recovered},
                         {k:'oob',label:'Out of bounds',on:p.oob,kind:'danger'});
-    if(!ours) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
+    /* Not in overtime: the ball is dead where the defence gets it, so there
+       is no return and no return touchdown to record. */
+    if(!ours && (p.q||1) < 5) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
                       {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'},
                       {k:'recTd',label:'Recovered for TD',on:p.recTd,kind:'danger'});
-    else fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'},
+    else if((p.q||1) < 5) fl.push({k:'retTd',label:themName()+' returned it for TD',on:p.retTd,kind:'danger'},
                  // the same two tags as the other side of the ball — the app works
                  // out who lost it from whose kick it was, so the words never change
                  {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'good'},
@@ -2367,6 +2484,9 @@ function commitPlay(){
   /* Something has to have been returned. If the turnover came off the play
      while the flag stayed on — the FR tag deleted, Fumble untapped — the six
      points go with it rather than sitting on a play nobody lost. */
+  /* Overtime has no returns at all — a flag left on from an edit, or from a
+     play moved into overtime afterwards, is dropped rather than scored. */
+  if((p.q||1) >= 5) p.retTd = false;
   if(p.retTd && (p.type==='run'||p.type==='pass'||p.type==='sack')
      && !p.int && !p.fumLost){ p.retTd=false; }
   if(!p.retTd) p.retBy = null;
@@ -2447,13 +2567,36 @@ function commitPlay(){
 
   /* One reading per change of possession. Not on an edit — he is looking at an
      old play, not the live clock — and not if this play already carries one. */
-  if(trackTop() && !wasEdit && g.status!=='final' && p.clock==null && endsPossession(p)){
+  /* Overtime is untimed — the clock sits at zero, so there is nothing to
+     ask for and a prompt at every change of possession would be pure noise. */
+  if(trackTop() && !wasEdit && g.status!=='final' && p.clock==null
+     && (p.q||1) < 5 && endsPossession(p)){
     askClock(p, finish);
   } else finish();
+  /* Both teams have had their series: the leader has won, or they go again. */
+  if(!wasEdit) otAfterPlay(g, p);
 }
 
 /* work out the next down/distance/possession after a play */
+/* The ordinary rules of football produce the next situation; overtime then
+   gets the last word, because a series there does not end the way a drive
+   does. Kept as a wrapper so the four-quarter logic below is untouched and
+   still testable on its own. */
 function nextSit(sit, p){
+  const s = nextSitBase(sit, p);
+  const q = p.q || sit.q || 1;
+  if(q < 5) return s;
+  if(p.type==='pat' || p.type==='note' || p.type==='penalty') return s;
+  /* A series ends on a score, on a turnover, or on four downs. The turnover
+     is the one that differs from regulation: the ball is dead where the
+     defence gets it, so there is nothing to place and nowhere to return it
+     to — the next series simply starts at the other 10. */
+  const over = p.td || isSafety(p) || p.type==='fg' || p.int || p.fumLost
+             || (s.poss !== p.poss);
+  if(!over) return s;
+  return otSit(q, p.poss === 'us' ? 'them' : 'us');
+}
+function nextSitBase(sit, p){
   let s = {q:p.q||sit.q, poss:p.poss, down:sit.down, dist:sit.dist, spot:sit.spot};
   const opp = p.poss==='us' ? 'them':'us';
   // NFHS: every touchback comes out to the 20 — kickoff or punt alike.
@@ -3055,6 +3198,11 @@ function wire(){
   };
 
   /* the clock sheet lives inside the modal, so one delegate covers the lot */
+  /* the overtime sheet lives in the same modal */
+  $('#modalBody').addEventListener('click', e=>{
+    const ot = e.target.closest('[data-otfirst]');
+    if(ot){ const g=game(); startOT(g ? (g.sit.q||5) : 5, ot.dataset.otfirst); return; }
+  });
   $('#modalBody').addEventListener('click', e=>{
     if(!UI.clk) return;
     const k=e.target.closest('[data-clkkey]'); if(k){ clockKey(k.dataset.clkkey); return; }
@@ -3606,13 +3754,17 @@ function topHTML(g, s, opts){
     t.drives.forEach(d=>{
       const side = d.poss==='us' ? 'us' : 'them';
       // a drive that carried over the horn belongs to both quarters — say so
-      const qlab = (d.qEnd && d.qEnd !== d.q) ? 'Q'+d.q+'-'+d.qEnd : 'Q'+d.q;
+      const qlab = d.untimed ? (d.q===5 ? 'OT1' : 'OT'+(d.q-4))
+                 : (d.qEnd && d.qEnd !== d.q) ? 'Q'+d.q+'-'+d.qEnd : 'Q'+d.q;
+      /* Overtime keeps its place in the order but has no bar and no time. */
+      const track = d.untimed ? '<span class="dvtrack ot"></span>'
+        : `<span class="dvtrack"><span class="dvfill ${side}" style="width:${(d.secs/longest*100).toFixed(1)}%"></span></span>`;
       h += `<div class="dvrow">
           <span class="dvnum">${d.n}</span>
           <span class="dvq">${esc(qlab)}</span>
           <span class="dvwho ${side}">${esc(d.poss==='us'?usShort():themShort())}</span>
-          <span class="dvtrack"><span class="dvfill ${side}" style="width:${(d.secs/longest*100).toFixed(1)}%"></span></span>
-          <span class="dvsecs">${secsToDur(d.secs)}</span>
+          ${track}
+          <span class="dvsecs">${d.untimed ? '&mdash;' : secsToDur(d.secs)}</span>
           <span class="dvres">${esc(d.result)} · ${d.plays} ${plural(d.plays,'play')}</span>
         </div>`;
     });
@@ -3621,12 +3773,16 @@ function topHTML(g, s, opts){
     const KEY = [['TO → TD','turnover returned for a touchdown'],
                  ['TO','turnover'], ['TOD','turnover on downs']];
     const said = KEY.filter(k => t.drives.some(d => d.result === k[0]));
-    if(said.length){
+    const notes = said.map(k => `<b>${esc(k[0])}</b> — ${esc(k[1])}`);
+    if(t.drives.some(d => d.untimed))
+      notes.push('overtime is untimed, so no clock is kept');
+    if(notes.length){
       h += `<p class="tiny muted" style="margin:7px 0 0">`
-         + said.map(k => `<b>${esc(k[0])}</b> — ${esc(k[1])}`).join(' &nbsp;·&nbsp; ')
-         + `</p>`;
+         + notes.join(' &nbsp;·&nbsp; ') + `</p>`;
     }
-    const ours = t.drives.filter(d=>d.poss==='us');
+    /* the average is of TIMED drives — an overtime series has no time to
+       average into it, and counting it as zero would drag the number down */
+    const ours = t.drives.filter(d=>d.poss==='us' && !d.untimed);
     if(ours.length){
       const avg = Math.round(ours.reduce((n,d)=>n+d.secs,0)/ours.length);
       const quick = ours.filter(d=>d.secs<90).length;
