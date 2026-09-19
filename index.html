@@ -724,7 +724,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-92';
+const APP_VERSION = '2026.09.19-93';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -4285,10 +4285,43 @@ function printableFrame(){
   return f;
 }
 
+/* A heading belongs to what comes after it, not to the page it happens to
+   land on. "SCORING PLAYS" at the foot of page 1 with the scoring plays on
+   page 2 is the single worst thing paper does to a report, so the heading
+   and the first of its content are glued together and a page may not break
+   between them. If they will not fit, the heading goes over with them.
+
+   The glue runs from the top of the heading to the bottom of the SECOND
+   row it introduces — two, not one, because a heading with a lone orphan
+   row under it reads as a mistake just the same. */
+function glueZones(doc, top){
+  const zones = [];
+  doc.body.querySelectorAll('h3').forEach(h => {
+    const hr = h.getBoundingClientRect();
+    const start = Math.round(hr.top - top);
+    let last = h, n = h.nextElementSibling, taken = 0, guard = 0;
+    while(n && taken < 2 && guard++ < 12){
+      const r = n.getBoundingClientRect();
+      if(r.height){
+        /* a table introduces itself with its own header row, so glue
+           through its first two rows of actual data */
+        const rows = n.querySelectorAll ? n.querySelectorAll('tbody tr') : [];
+        if(rows.length){ last = rows[Math.min(1, rows.length - 1)]; taken = 2; break; }
+        last = n; taken++;
+      }
+      n = n.nextElementSibling;
+    }
+    const end = Math.round(last.getBoundingClientRect().bottom - top);
+    if(end > start) zones.push([start, end]);
+  });
+  return zones;
+}
+
 /* Where a page may end. Paper must not cut through a table row or a drive
-   bar, and a heading must not be left alone at the foot of a page — the
-   same two rules the print stylesheet states, applied here by hand because
-   a canvas knows nothing about them. */
+   bar, must not strand a heading away from its content, and must not leave
+   a heading with a single orphan row — the same instincts the print
+   stylesheet states in CSS, applied here by hand because a canvas knows
+   nothing about them. */
 function cutPoints(doc){
   const body = doc.body, top = body.getBoundingClientRect().top;
   const out = [], banned = {};
@@ -4304,11 +4337,18 @@ function cutPoints(doc){
     t.querySelectorAll('thead tr').forEach(r =>
       banned[Math.round(r.getBoundingClientRect().top - top)] = 1);
   });
+  const zones = glueZones(doc, top);
+  /* The top of a heading stays legal — that IS the break that carries the
+     heading over to its content. Everything between it and the content is
+     not. */
+  const glued = y => zones.some(z => y > z[0] && y < z[1]);
+
   body.querySelectorAll('tr,.dvrow,h3,p,.topsplit,.topkey,table,.statgrp').forEach(el => {
     const r = el.getBoundingClientRect();
     if(!r.height) return;
     const y = Math.round(r.top - top);
     if(banned[y] && el.tagName === 'TR') return;
+    if(glued(y)) return;
     out.push({ y: y, tag: el.tagName });
   });
   out.sort((a,b) => a.y - b.y);
@@ -4321,18 +4361,14 @@ function paginate(doc, total){
   const cuts = cutPoints(doc), pages = [];
   let y = 0, guard = 0;
   while(y < total && guard++ < 200){
-    let end = y + PG_H;
+    const end = y + PG_H;
     if(end >= total){ pages.push([y, total]); break; }
-    /* the last place we are allowed to break at or before the page edge */
-    let best = -1, bestI = -1;
-    for(let i = 0; i < cuts.length; i++){
-      if(cuts[i].y > y + 40 && cuts[i].y <= end){ best = cuts[i].y; bestI = i; }
-    }
-    /* a heading immediately above the break would be stranded — break before it */
-    while(bestI > 0 && cuts[bestI-1].tag === 'H3' && cuts[bestI-1].y > y + 40){
-      best = cuts[bestI-1].y; bestI--;
-    }
-    if(best <= y) best = end;           // nothing to break on: a solid block
+    /* the last legal break at or before the page edge. Headings need no
+       special case here: a break that would strand one is not in the list. */
+    let best = -1;
+    for(let i = 0; i < cuts.length; i++)
+      if(cuts[i].y > y + 40 && cuts[i].y <= end) best = cuts[i].y;
+    if(best <= y) best = end;           // a solid block taller than a page
     pages.push([y, best]);
     y = best;
   }
