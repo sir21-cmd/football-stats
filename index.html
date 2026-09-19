@@ -390,16 +390,25 @@ td.num.short{color:var(--warn); font-weight:800}
 .topfoot.short{border-top-color:var(--warn)}
 .topfoot span{display:flex; align-items:center; gap:6px}
 /* drive length */
-.dvrow{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:.8rem}
-.dvwho{width:52px; font-weight:800; font-size:.68rem; flex:none; letter-spacing:.02em;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dvrow{display:flex; align-items:center; gap:7px; padding:4px 0; font-size:.8rem}
+/* Drive number and quarter, so a row can be pointed at in a film session:
+   "look at drive 7". Q1-2 on a drive that carried over the horn. */
+.dvnum{width:14px; flex:none; text-align:right; font-weight:800; font-size:.72rem;
+  color:var(--muted); font-variant-numeric:tabular-nums}
+.dvq{width:28px; flex:none; font-weight:800; font-size:.64rem; letter-spacing:.03em;
+  color:var(--muted)}
+/* The team name takes what it needs rather than a fixed slot — two new columns
+   on the left had squeezed LUTHERAN down to LUTH… on a phone. */
+.dvwho{flex:0 0 auto; max-width:78px; min-width:0; font-weight:800; font-size:.68rem;
+  letter-spacing:.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .dvwho.us{color:#2a78d6} .dvwho.them{color:#eb6834}
-.dvtrack{flex:1; min-width:40px; height:12px; background:#eef2f6; border-radius:4px; overflow:hidden}
+.dvtrack{flex:1 1 44px; min-width:44px; height:12px; background:#eef2f6; border-radius:4px; overflow:hidden}
 .dvfill{display:block; height:100%; border-radius:4px}
 .dvfill.us{background:#2a78d6} .dvfill.them{background:#eb6834}
-.dvsecs{width:42px; text-align:right; font-variant-numeric:tabular-nums; font-weight:700; flex:none}
-.dvres{width:118px; color:var(--muted); font-size:.7rem; flex:none; overflow:hidden;
-  text-overflow:ellipsis; white-space:nowrap}
+.dvsecs{width:38px; text-align:right; font-variant-numeric:tabular-nums; font-weight:700; flex:none}
+/* Last in the row, so it is the one that gives way when the field is tight. */
+.dvres{flex:0 1 auto; max-width:118px; min-width:0; color:var(--muted); font-size:.7rem;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 /* the clock field inside a play being edited */
 .printonly{display:none}
 .clkedit{margin-top:14px; padding:11px 12px; border:2px solid var(--accent);
@@ -694,7 +703,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-81';
+const APP_VERSION = '2026.09.19-82';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -931,8 +940,8 @@ function possessionTime(g){
       if(owners.length === 1){
         qo[owners[0]] += elapsed;
         const last = covered[covered.length-1];
-        out.drives.push({ q:q, poss:owners[0], start:a.secs, end:b.secs, secs:elapsed,
-                          plays:covered.length, result:driveResult(last, b.end) });
+        out.drives.push({ q:q, qEnd:q, poss:owners[0], start:a.secs, end:b.secs, secs:elapsed,
+                          plays:covered.length, result:driveResult(last, b.end ? q : 0) });
       } else {
         /* Two sides inside one span means a reading is missing between them.
            Report it; never split the difference. */
@@ -948,10 +957,41 @@ function possessionTime(g){
     out.byQuarter[q] = qo;
     out.us += qo.us; out.them += qo.them; out.unaccounted += qo.unaccounted;
   }
+
+  /* A drive does not end because a quarter did.
+
+     Time of possession is counted per quarter, so the maths has to break at the
+     horn — but a possession that starts in the 1st and scores in the 2nd is ONE
+     drive, and showing it as two halved every long drive in the book and dragged
+     down "averaged X a drive", which is the number a coach actually uses.
+
+     So: stitch them back together. Only across the 1st into the 2nd and the 3rd
+     into the 4th — half time and the final horn genuinely end a drive — and only
+     when the same side still has the ball and the earlier one really did run out
+     of quarter rather than ending on a punt or a score. */
+  for(let i = out.drives.length - 1; i > 0; i--){
+    const b = out.drives[i], a = out.drives[i-1];
+    if(a.qEnd !== b.q - 1) continue;            // not either side of one break
+    if(a.qEnd === 2) continue;                  // half time
+    if(a.poss !== b.poss) continue;             // the ball changed hands at the horn
+    if(!/^End of quarter$/.test(a.result)) continue;   // it ended some other way
+    a.secs  += b.secs;
+    a.plays += b.plays;
+    a.result = b.result;
+    a.end    = b.end;
+    a.qEnd   = b.qEnd;
+    out.drives.splice(i, 1);
+  }
+  out.drives.forEach((d,i) => { d.n = i+1; });
+
   return out;
 }
 
-function driveResult(p, quarterEnd){
+/* `endQ` is the quarter that ran out under this drive, or 0 if it did not.
+   Which quarter matters: the horn at the end of the 2nd and the 4th really does
+   end a drive, and the one at the end of the 1st and the 3rd does not — you
+   swap ends and keep playing. Calling all four "End of quarter" hid that. */
+function driveResult(p, endQ){
   if(!p) return '—';
   if(p.td) return 'Touchdown';
   if(isSafety(p)) return 'Safety';
@@ -959,7 +999,9 @@ function driveResult(p, quarterEnd){
   if(p.type==='punt') return 'Punt';
   if(p.type==='kickoff') return 'Kickoff';
   if(p.int || p.fumLost) return 'Turnover';
-  if(quarterEnd) return 'End of quarter';
+  if(endQ===2) return 'End of half';
+  if(endQ===4) return 'End of game';
+  if(endQ) return 'End of quarter';
   return 'Downs';
 }
 
@@ -1451,9 +1493,35 @@ function endQuarter(){
     def:[], note:'End of '+qLabel(from), quarterEnd:true,
     sitBefore:before, sitAfter:Object.assign({}, before, {q:from+1}) });
   g.sit.q = from+1;
+  /* Half time is not just the next quarter. The ball goes back out on a free
+     kick, and it is the side that did NOT kick off to start the game that kicks
+     to start the second half — so the app knows where the ball belongs and had
+     no business making him spot it by hand. */
+  let half = false;
+  if(from === 2){
+    const opened = openingKick(g);
+    if(opened){
+      const kick = opened==='us' ? 'them' : 'us';
+      g.sit = { q:3, poss:kick, down:1, dist:10, spot: kick==='us' ? 40 : 60 };
+      half = kick;
+    }
+  }
   UI.qNudgeFor = null;
   g.updatedAt = nowISO(); save(); render();
-  toast(qLabel(g.sit.q)+' — ends change, '+usName()+' now defend the '+(fieldFlipped()?'right':'left'));
+  if(half){
+    toast('Second half — '+(half==='us'?usName():themName())+' kick off from their own 40', 3200);
+  } else if(from === 2){
+    toast('Second half — no opening kickoff on record, so set the ball yourself', 3600);
+  } else {
+    toast(qLabel(g.sit.q)+' — ends change, '+usName()+' now defend the '+(fieldFlipped()?'right':'left'));
+  }
+}
+/* Who kicked off to start the game. Newer games carry it; older ones are read
+   back off the first kickoff in the book rather than guessed at. */
+function openingKick(g){
+  if(g.kickoff==='us' || g.kickoff==='them') return g.kickoff;
+  const k = (g.plays||[]).find(p => p.type==='kickoff' && (p.q||1)===1);
+  return k ? k.poss : null;
 }
 /* Marking a game final has to close the quarter too.
 
@@ -3445,7 +3513,11 @@ function topHTML(g, s, opts){
     h += `<div class="statgrp"><h3>Drive length</h3>`;
     t.drives.forEach(d=>{
       const side = d.poss==='us' ? 'us' : 'them';
+      // a drive that carried over the horn belongs to both quarters — say so
+      const qlab = (d.qEnd && d.qEnd !== d.q) ? 'Q'+d.q+'-'+d.qEnd : 'Q'+d.q;
       h += `<div class="dvrow">
+          <span class="dvnum">${d.n}</span>
+          <span class="dvq">${esc(qlab)}</span>
           <span class="dvwho ${side}">${esc(d.poss==='us'?usShort():themShort())}</span>
           <span class="dvtrack"><span class="dvfill ${side}" style="width:${(d.secs/longest*100).toFixed(1)}%"></span></span>
           <span class="dvsecs">${secsToDur(d.secs)}</span>
