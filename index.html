@@ -470,7 +470,15 @@ td.num.short{color:var(--warn); font-weight:800}
   table.wide th:nth-child(2), table.wide td:nth-child(2){width:17%; min-width:0; max-width:none}
   th,td{padding:3px 5px; border-bottom:1px solid #bbb}
   th{background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
-  .statgrp{break-inside:avoid; page-break-inside:avoid}
+  /* A section must NOT be atomic. Keeping every group whole meant a long one
+     — an eighteen-drive chart, a full defensive table — jumped to the next
+     page rather than starting on this one, and left better than half a page
+     blank behind it. Let a group flow; just never break it in a stupid place:
+     a heading stays with what it introduces, and neither a table row nor a
+     drive bar is ever cut in half. */
+  h3{break-after:avoid; page-break-after:avoid; break-inside:avoid}
+  .dvrow{break-inside:avoid; page-break-inside:avoid}
+  .topsplit,.topkey{break-inside:avoid; page-break-inside:avoid}
   h3{color:#000}
 }
 </style>
@@ -708,7 +716,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-84';
+const APP_VERSION = '2026.09.19-89';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
