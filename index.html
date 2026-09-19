@@ -694,7 +694,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.17-80';
+const APP_VERSION = '2026.09.19-81';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1001,9 +1001,15 @@ function playPoints(p){
   if(p.type==='pat'){ if(p.patGood) add(scorer,1); if(p.twoPtGood) add(scorer,2); }
   else { if(p.twoPtGood) add(scorer,2); }
   if(p.type==='fg' && p.fgGood) add(scorer,3);
-  // a defensive score counts on the board too, so the scoring summary's points
-  // column can never drift from the scoreboard
-  if(p.defTd && !p.td) add(p.defTdBy!=null ? (p.poss==='us'?'them':'us') : scorer, 6);
+  /* There used to be a second, separate route for a defensive score here, read
+     but never written by anything. Its rule was "if a player was named the
+     defence scored, otherwise use whoever had the ball" — which would have put
+     the six points on US the day we fumbled and THEY returned it, because we do
+     not carry their jersey numbers and so could never name anybody.
+
+     Gone. A return for a touchdown is `retTd`, whichever side it belongs to, and
+     commitPlay sets scoreBy to the side that did NOT have the ball. One route,
+     right in both directions. */
   if(isSafety(p)) add(safetyFor(p), 2);
   return out;
 }
@@ -1068,17 +1074,22 @@ function computeStats(g){
     if(ours && (p.type==='run'||p.type==='pass') && p.down===4){ T.fourthAtt++; if(p.fd) T.fourthConv++; }
 
     /* ---- our offense ---- */
+    /* A touchdown on OUR play is not automatically OURS. Fumble it away and let
+       them run it back and p.td is true, scoreBy is theirs, and the ball carrier
+       must not be handed a rushing touchdown for the worst play of his night.
+       Everything on the offensive stat lines hangs off this rather than p.td. */
+    const offTd = p.td && (p.scoreBy || p.poss) === p.poss;
     if(ours){
       if(p.type==='run'){
         T.rushAtt++; T.rushYds += (p.yds||0);
         if(p.rusher!=null && p.rusher!==''){
           const r=bump(S.rushing,p.rusher,RS());
           r.att++; r.yds+=(p.yds||0); r.long=Math.max(r.long,p.yds||0);
-          if(p.td) r.td++;
+          if(offTd) r.td++;
           if(p.twoPtGood) r.conv++;
           if(p.fumLost) r.fum++;
         }
-        if(p.td){ const s=bump(S.scoring,p.rusher,SC()); s.tdRun++; }
+        if(offTd){ const s=bump(S.scoring,p.rusher,SC()); s.tdRun++; }
         if(p.twoPtGood && p.type==='run'){ const s=bump(S.scoring,p.rusher,SC()); s.convRun++; }
       }
       else if(p.type==='pass'){
@@ -1095,10 +1106,10 @@ function computeStats(g){
         if(p.comp && p.receiver!=null && p.receiver!==''){
           const w=bump(S.receiving,p.receiver,CS());
           w.rec++; w.yds+=(p.yds||0); w.long=Math.max(w.long,p.yds||0);
-          if(p.td) w.td++;
+          if(offTd) w.td++;
           if(p.twoPtGood) w.conv++;
           if(p.fumLost && p.fumBy===p.receiver) w.fum++;
-          if(p.td){ const s=bump(S.scoring,p.receiver,SC()); s.tdRec++; }
+          if(offTd){ const s=bump(S.scoring,p.receiver,SC()); s.tdRec++; }
           if(p.twoPtGood){ const s=bump(S.scoring,p.receiver,SC()); s.convRec++; }
         }
       }
@@ -1198,8 +1209,19 @@ function computeStats(g){
         r.ret++; r.yds+=(p.retYds||0); r.long=Math.max(r.long,p.retYds||0);
         if(p.retTd) r.td++;
       }
+      /* Six points on a return, and the name that goes with them.
+
+         `retBy` is set by hand on a scrimmage play — the man who picked the ball
+         up and ran it in, who is not always the man credited with recovering it.
+         Failing that, whoever carries the FR or INT tag scored it, which covers
+         the ordinary case with no extra tap at all.
+
+         A kick return touchdown is the return man's and belongs in the punt or
+         kickoff return table above; a scoop and score is a DEFENSIVE touchdown
+         and belongs on his defensive line. That is the `!p.returner` test — it
+         is only ever set on a kick. */
       if(p.retTd){
-        let who = p.returner;
+        let who = p.retBy || p.returner;
         if(!who){ const d=(p.def||[]).find(d=>d.s==='INT'||d.s==='FR'); if(d) who=d.n; }
         if(who){ bump(S.scoring,who,SC()).tdMisc++; if(!p.returner) bump(S.defense,who,DS()).td++; }
       }
@@ -1239,7 +1261,6 @@ function computeStats(g){
         case 'SAF': x.saf++; bump(S.scoring,d.n,SC()).saf++; break;
       }
     });
-    if(p.defTd && p.defTdBy){ bump(S.defense,p.defTdBy,DS()).td++; bump(S.scoring,p.defTdBy,SC()).tdMisc++; }
   });
 
   T.totalYards = T.rushYds + T.passYds;
@@ -1289,7 +1310,8 @@ function totalRow(list, keys){
    ========================================================================= */
 const UI = { view:'game', statSide:'off', seasonSide:'off', playFilter:'all',
              defStat:'T', recent:{}, editingId:null, insertAt:null,
-             showAll:{}, defMore:false, defLegend:false, qNudgeFor:null };
+             showAll:{}, defMore:false, defLegend:false, qNudgeFor:null,
+             scoopPick:false };
 let E = null;   // current entry draft
 
 const QUICK_YDS = [-10,-5,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,35,40,50,60];
@@ -1567,6 +1589,10 @@ const ROLE_POS = {
   kicker:  ['K','PK','P'],
   punter:  ['P','K','PK'],
   def:     ['DL','DE','DT','NT','NG','EDGE','LB','ILB','OLB','MLB','WLB','SLB',
+            'DB','CB','S','FS','SS','SAF','NB','ATH','UTIL'],
+  /* Who carried a recovered fumble or a pick into the end zone. Same men as the
+     defensive panel — it IS the defence, just the one of them who scored. */
+  retBy:   ['DL','DE','DT','NT','NG','EDGE','LB','ILB','OLB','MLB','WLB','SLB',
             'DB','CB','S','FS','SS','SAF','NB','ATH','UTIL']
 };
 /* the ones who do this job nearly every time — shown first and outlined */
@@ -1652,6 +1678,64 @@ function kickMath(p){
 function flagHTML(list){
   return '<div class="flags">'+list.map(f=>
     `<button class="flag ${f.on?'on':''} ${f.kind||''}" data-flag="${f.k}">${esc(f.label)}</button>`).join('')+'</div>';
+}
+
+/* =========================================================================
+   SCOOP AND SCORE
+
+   Their fumble, we pick it up, we take it in. It went unrecorded for a whole
+   season because the flag only ever existed on the interception branch — a
+   pick-six could be logged and a scoop and score could not, though they are
+   the same six points by the same route.
+
+   It rides on `retTd`, exactly as the pick-six does: commitPlay turns that into
+   a touchdown for the side that did NOT have the ball, so the scoreboard, the
+   situation and the extra point all follow with nothing new behind them.
+   ========================================================================= */
+/* Offered only once the turnover is on — you cannot run back a ball you did
+   not come up with, and an extra flag on every snap of the night is a cost. */
+function scoopFlag(p, ours){
+  return ours
+    ? {k:'retTd', label:themName()+' returned it for TD', on:p.retTd, kind:'danger'}
+    : {k:'retTd', label:'Returned for TD',                on:p.retTd, kind:'good'};
+}
+/* Who carried it in. Pre-selected to whoever was tagged with the recovery or
+   the pick, which is the same man nine times in ten — so it is one tap, and
+   the tenth time (a lateral, a second man scooping a loose ball) is still
+   recordable instead of quietly wrong. */
+function scoopHTML(p, ours){
+  if(!p.retTd) return '';
+  if(p.type==='punt' || p.type==='kickoff') return '';
+  if(ours) return `<div class="note" style="margin-top:9px">Six for ${esc(themName())}.
+    Their players are not on your roster, so there is no name to put on it.</div>`;
+  const tagged = ((p.def||[]).find(d=>d.s==='FR') || (p.def||[]).find(d=>d.s==='INT') || {}).n;
+  const who = p.retBy != null ? p.retBy : (tagged != null ? tagged : null);
+  /* When the answer is already known, say it in one line rather than putting a
+     second copy of the whole roster on the screen — the defensive panel is
+     right underneath with the same faces on it, and every extra grid is more
+     thumb-scrolling between snaps. The chips are one tap away for the lateral. */
+  if(who != null && !UI.scoopPick){
+    return `<hr><h3>Scored by</h3>
+      <div class="row" style="gap:8px; align-items:center">
+        <span class="grow"><b>${esc(pLabel(who))}</b>${p.retBy==null
+          ? ' <span class="tiny muted">— the man you tagged with it</span>' : ''}</span>
+        <button class="btn xs ghost" data-act="scooppick">Someone else</button>
+      </div>`;
+  }
+  return '<hr><h3>Scored by</h3>' + chipsHTML('retBy', who) +
+    (who == null ? '<p class="tiny muted" style="margin:5px 0 0">Tag the recovery below, or pick whoever took it in.</p>' : '');
+}
+/* The app knows the yard line, so it should do the arithmetic rather than leave
+   it to you at eleven at night. Only ever fills a number you have not touched. */
+function scoopYards(p){
+  if(!p.retTd || p.poss==='us') return;                 // their return is not our stat line
+  if(p.type==='punt' || p.type==='kickoff') return;     // kicks have their own maths
+  // we always attack 100, so the run back is whatever is left of the field
+  const end = clamp((p.spot||0) - scrimGain(p), 0, 100);
+  const dist = Math.round(100 - end);
+  if(p.int){ if(!p.retYds) p.retYds = dist; return; }
+  const d = (p.def||[]).find(x=>x.s==='FR') || (p.def||[]).find(x=>x.s==='INT');
+  if(d && !d.y) d.y = dist;
 }
 /* Our defence only earns stats when the other team has the ball — or when we
    kick and cover. Anywhere else, defensive tags can't apply. */
@@ -1771,6 +1855,7 @@ function startEntry(type){
      It is not a setting — one tap on one kick should not leave every later
      kicker list showing all 24 names. */
   UI.showAll = {};
+  UI.scoopPick = false;    // same rule: the open roster belongs to one play
   E = { type:type, p: typeDefaults({ id:DB.deviceId+'-'+uid(), dev:DB.deviceId, t:nowISO(),
         q:s.q, poss:s.poss, down:s.down, dist:s.dist, spot:s.spot, yds:0, def:[] }, type) };
   renderEntry();
@@ -1895,11 +1980,14 @@ function formHTML(g){
     if(ours){ h+='<h3>Ball carrier</h3>'+chipsHTML('rusher', p.rusher); }
     h+='<hr><h3>Yards gained</h3>'+padHTML(p.yds,'yds');
     h+=prev;
-    h+=flagHTML([
+    const fl=[
       {k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'},
       {k:'fum', label:'Fumble', on:p.fum},
       {k:'fumLost', label:'Fumble turnover', on:p.fumLost, kind:'danger'}
-    ]);
+    ];
+    if(p.fumLost) fl.push(scoopFlag(p, ours));
+    h+=flagHTML(fl);
+    h+=scoopHTML(p, ours);
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
   else if(E.type==='pass'){
@@ -1918,8 +2006,12 @@ function formHTML(g){
     const fl=[];
     if(p.result==='comp') fl.push({k:'td', label:'TOUCHDOWN', on:p.td, kind:'good'});
     if(p.result==='comp'||p.result==='sack') fl.push({k:'fum',label:'Fumble',on:p.fum},{k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'});
-    if(p.result==='int') fl.push({k:'retTd', label:'Returned for TD', on:p.retTd, kind:'danger'});
+    /* A strip sack run back is the same play as a scoop and score off a run,
+       so the flag belongs on every branch a fumble can be lost on. */
+    if((p.result==='comp'||p.result==='sack') && p.fumLost) fl.push(scoopFlag(p, ours));
+    if(p.result==='int') fl.push(scoopFlag(p, ours));
     h+=flagHTML(fl);
+    h+=scoopHTML(p, ours);
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
   else if(E.type==='punt' || E.type==='kickoff'){
@@ -2152,6 +2244,12 @@ function commitPlay(){
     if(tdRes._td) p.td = true;
   }
   if(p.td && !p.scoreBy) p.scoreBy = p.poss;
+  /* Something has to have been returned. If the turnover came off the play
+     while the flag stayed on — the FR tag deleted, Fumble untapped — the six
+     points go with it rather than sitting on a play nobody lost. */
+  if(p.retTd && (p.type==='run'||p.type==='pass'||p.type==='sack')
+     && !p.int && !p.fumLost){ p.retTd=false; }
+  if(!p.retTd) p.retBy = null;
   if(p.retTd){ p.td=true; p.scoreBy = p.poss==='us' ? 'them' : 'us'; }
   /* Scoop and score on a kick. The muff belongs to the return team, so the side
      that recovers and scores is always the side that kicked it. */
@@ -3067,6 +3165,9 @@ function onEntryClick(e){
       if(!p.manualYds) initKickSpots(p, E.type==='punt'?40:55);
       return renderEntry();
     }
+    /* Open the full roster on a return touchdown — the one time in ten the man
+       who fell on it is not the man who took it in. */
+    if(act.dataset.act==='scooppick'){ UI.scoopPick=true; return renderEntry(); }
     if(act.dataset.act==='cancel') return cancelEntry();
     if(act.dataset.act==='save')   return commitPlay();
     if(act.dataset.act==='delete') return deleteEditing();
@@ -3098,7 +3199,11 @@ function onEntryClick(e){
       else p.def.push({n:num, s:UI.defStat, y:0});
       syncTurnoverFromTags(p);   // a recovery or a pick hands us the ball
     }
-    else p[role] = (String(p[role])===String(num)) ? null : num;
+    else {
+      p[role] = (String(p[role])===String(num)) ? null : num;
+      // picked his man — fold the roster back up rather than leaving it open
+      if(role==='retBy' && p.retBy!=null) UI.scoopPick=false;
+    }
     return renderEntry();
   }
   const sa=t.closest('[data-showall]'); if(sa){ const r=sa.dataset.showall;
@@ -3141,8 +3246,13 @@ function onEntryClick(e){
   const fl=t.closest('[data-flag]'); if(fl){ const k=fl.dataset.flag;
     p[k]=!p[k];
     if(k==='fumLost'&&p[k]) p.fum=true;
-    if(k==='fum'&&!p[k]) p.fumLost=false;
+    /* Taking the turnover back off takes the score with it — there is nothing
+       left to have returned, and a stranded retTd would put six on the board. */
+    if(k==='fum'&&!p[k]){ p.fumLost=false; p.retTd=false; p.retBy=null; }
+    if(k==='fumLost'&&!p[k] && p.type!=='punt' && p.type!=='kickoff' && !p.int){
+      p.retTd=false; p.retBy=null; }
     if(k==='td'&&p[k]) p.fd=false;
+    if(k==='retTd'&&p[k]) scoopYards(p);   // fill in the run back it can work out
     return renderEntry(); }
   const rs=t.closest('[data-res]'); if(rs){ p.result=rs.dataset.res; if(p.result==='inc') p.yds=0; return renderEntry(); }
   const fg=t.closest('[data-fg]'); if(fg){ p.fgGood = fg.dataset.fg==='1'; return renderEntry(); }
