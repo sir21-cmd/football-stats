@@ -724,7 +724,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-93';
+const APP_VERSION = '2026.09.19-94';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1027,12 +1027,17 @@ function possessionTime(g){
    swap ends and keep playing. Calling all four "End of quarter" hid that. */
 function driveResult(p, endQ, ended){
   if(!p) return '—';
-  if(p.td) return 'Touchdown';
+  /* A drive that ended in six for the OTHER side is not this drive scoring.
+     Bishop Foley ran, fumbled at their own 16, and Luke Robinson took it in:
+     their drive said "Touchdown", which is true of the play and false of the
+     drive. Their drive ended when they lost the ball, and what happened next
+     was ours. TO → TD says both, in the order they happened. */
+  if(p.td) return (p.scoreBy || p.poss) === p.poss ? 'TD' : 'TO → TD';
   if(isSafety(p)) return 'Safety';
   if(p.type==='fg') return p.fgGood ? 'Field goal' : 'Missed FG';
   if(p.type==='punt') return 'Punt';
   if(p.type==='kickoff') return 'Kickoff';
-  if(p.int || p.fumLost) return 'Turnover';
+  if(p.int || p.fumLost) return 'TO';
   if(endQ===2) return 'End of half';
   if(endQ===4) return 'End of game';
   if(endQ) return 'End of quarter';
@@ -2703,10 +2708,35 @@ function render(){
 }
 
 /* ---------- play descriptions ---------- */
-function playText(p){
+/* A touchdown scored by the side that did NOT have the ball: who took it in,
+   how far, and off what. The returner is named on the flag if it was set, and
+   otherwise read off the FR or INT tag, which is the same man nine times in
+   ten. Their returns carry no name at all — we do not keep their roster. */
+function returnScore(p){
+  if(!p || !p.retTd) return null;
+  const tag = (p.def||[]).find(d=>d.s==='FR') || (p.def||[]).find(d=>d.s==='INT') || {};
+  const who = p.retBy != null ? p.retBy : (tag.n != null ? tag.n : null);
+  const yds = p.int ? (p.retYds||0) : (tag.y != null ? tag.y : (p.retYds||0));
+  return { who: who, yds: yds, kind: p.int ? 'interception' : 'fumble' };
+}
+/* opts.raw   — the play as it was run, ignoring who ended up with the points.
+   opts.noTeam — drop the leading team name, for a list that already names it. */
+function playText(p, opts){
+  opts = opts || {};
   const our = p.poss==='us';
   const who = n => n? '#'+n+(pname(n)?' '+pname(n).split(' ').slice(-1)[0]:'') : '';
   const side = our? '' : themName()+' ';
+  /* The headline is normally written from whoever had the ball, which is
+     exactly wrong when the other side scored on it: "Bishop Foley run for 0"
+     for a play that put six on the board for Shrine. Lead with the points. */
+  const rs = opts.raw ? null : returnScore(p);
+  if(rs){
+    const man = rs.who ? who(rs.who) + ' ' : '';
+    const head = `${man}${rs.yds} yd ${rs.kind} return`;
+    if(opts.noTeam) return head;
+    const team = scoredBy(p)==='us' ? usName() : themName();
+    return `${String(team).toUpperCase()} TD — ${head}`;
+  }
   let s='';
   switch(p.type){
     case 'run': s = our ? `${who(p.rusher)||'Run'} run for ${p.yds||0}` : `${side}run for ${p.yds||0}`; break;
@@ -2750,9 +2780,18 @@ function defSummary(p){
 }
 function playHTML(p,i){
   const cls = ['play', p.poss==='us'?'us':'them'];
+  /* Gold is for a score, red for a turnover, and a scoop-and-score is both.
+     Red used to win because it is written second in the stylesheet, so the
+     best play of the night was filed under bad news. Whoever got the points
+     decides the colour now: gold when they are ours, red when the turnover
+     cost us. A turnover with no score is red exactly as before. */
+  const mine = p.td && scoredBy(p)==='us';
   if(p.td||(p.type==='fg'&&p.fgGood)) cls.push('score');
-  if(p.int||p.fumLost) cls.push('turn');
+  if((p.int||p.fumLost) && !mine) cls.push('turn');
   const sub = [qLabel(p.q), sitText({down:p.down,dist:p.dist,spot:p.spot,poss:p.poss}), 'at '+spotLabel(p.spot)];
+  /* the play that caused it is still on the record, just no longer pretending
+     to be the story */
+  if(returnScore(p)) sub.push('on ' + playText(p, {raw:true}));
   if(p.note && p.type!=='penalty' && p.type!=='note') sub.push('“'+p.note+'”');
   const d=defSummary(p);
   return `<div class="${cls.join(' ')}" data-play="${esc(p.id)}">
@@ -3579,8 +3618,13 @@ function topHTML(g, s, opts){
     });
     /* Its own key, so the abbreviation never has to be guessed at by whoever
        the report gets handed to. Only when one actually happened. */
-    if(t.drives.some(d=>d.result==='TOD')){
-      h += `<p class="tiny muted" style="margin:7px 0 0"><b>TOD</b> — turnover on downs</p>`;
+    const KEY = [['TO → TD','turnover returned for a touchdown'],
+                 ['TO','turnover'], ['TOD','turnover on downs']];
+    const said = KEY.filter(k => t.drives.some(d => d.result === k[0]));
+    if(said.length){
+      h += `<p class="tiny muted" style="margin:7px 0 0">`
+         + said.map(k => `<b>${esc(k[0])}</b> — ${esc(k[1])}`).join(' &nbsp;·&nbsp; ')
+         + `</p>`;
     }
     const ours = t.drives.filter(d=>d.poss==='us');
     if(ours.length){
@@ -3678,7 +3722,7 @@ function scoringListHTML(g){
   const sc=g.plays.filter(p=>p.td||(p.type==='fg'&&p.fgGood)||isSafety(p));
   return `<div class="statgrp"><h3>Scoring plays</h3>`+(sc.length?
     '<ol class="small" style="margin:0; padding-left:20px">'+sc.map(p=>
-      `<li>${qLabel(p.q)} — <b>${esc(scoredBy(p)==='us'?usName():themName())}</b>: ${esc(playText(p))}</li>`).join('')+'</ol>'
+      `<li>${qLabel(p.q)} — <b>${esc(scoredBy(p)==='us'?usName():themName())}</b>: ${esc(playText(p,{noTeam:true}))}</li>`).join('')+'</ol>'
     : '<p class="small muted">No scoring recorded.</p>')+'</div>';
 }
 
