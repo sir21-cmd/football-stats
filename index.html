@@ -708,7 +708,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-83';
+const APP_VERSION = '2026.09.19-84';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1109,7 +1109,7 @@ function computeStats(g){
     puntRet:{}, koRet:{}, punts:{}, kickoffs:{}, kicking:{},
     team:{ firstDowns:0, penYds:0, penCount:0, rushAtt:0, rushYds:0, passComp:0, passAtt:0,
            passYds:0, passInt:0, sacksAllowed:0, fumbles:0, fumblesLost:0, turnovers:0, plays:0,
-           tdTotal:0, oppFirstDowns:0, oppPenYds:0, oppRushYds:0, oppPassYds:0, oppTurnovers:0,
+           tdTotal:0, oppFirstDowns:0, oppPenYds:0, oppPenCount:0, oppRushYds:0, oppPassYds:0, oppTurnovers:0,
            oppRushAtt:0, oppPassAtt:0, oppPassComp:0, sacksBy:0,
            takeaways:0, thirdConv:0, thirdAtt:0, fourthConv:0, fourthAtt:0 },
     score:{ us:[0,0,0,0,0], them:[0,0,0,0,0], usTotal:0, themTotal:0 },
@@ -1138,7 +1138,10 @@ function computeStats(g){
     if(p.fd){ if(ours) T.firstDowns++; else T.oppFirstDowns++; }
     if(p.penYds && !p.declined){
       const on = p.penOn || (ours?'us':'them');
-      if(on==='us'){ T.penYds+=p.penYds; T.penCount++; } else { T.oppPenYds+=p.penYds; }
+      /* Both sides get counted, not just the yards. "10 for 110" is the number
+         a coach acts on — 110 yards could be seven flags or it could be two. */
+      if(on==='us'){ T.penYds+=p.penYds; T.penCount++; }
+      else { T.oppPenYds+=p.penYds; T.oppPenCount++; }
     }
     if(ours && (p.type==='run'||p.type==='pass') && p.down===3){ T.thirdAtt++; if(p.fd) T.thirdConv++; }
     if(ours && (p.type==='run'||p.type==='pass') && p.down===4){ T.fourthAtt++; if(p.fd) T.fourthConv++; }
@@ -3640,7 +3643,7 @@ function teamHTML(g,s,opts){
     ${line('Total yards', t.totalYards, t.oppTotalYards)}
     ${line('Yards per play', avg(t.totalYards,t.scrimPlays), avg(t.oppTotalYards,t.oppScrimPlays), 1)}
     ${line('Turnovers lost', t.turnovers, t.takeaways)}
-    ${line('Penalty yards', t.penYds, t.oppPenYds)}
+    ${line('Penalties', (t.penCount||0)+'-'+(t.penYds||0), (t.oppPenCount||0)+'-'+(t.oppPenYds||0))}
     ${line('3rd down', t.thirdConv+'/'+t.thirdAtt, '—')}
     ${line('4th down', t.fourthConv+'/'+t.fourthAtt, '—')}
     ${line('Sacks', t.sacksBy, t.sacksAllowed)}
@@ -3753,7 +3756,7 @@ function csvStats(g,s){
   rows.push(['TEAM']);
   const t=s.team;
   [['First downs',t.firstDowns],['Rushing yards',t.rushYds],['Passing yards',t.passYds],['Total yards',t.totalYards],
-   ['Penalty yards',t.penYds],['Turnovers',t.turnovers],['Takeaways',t.takeaways],
+   ['Penalties',t.penCount],['Penalty yards',t.penYds],['Turnovers',t.turnovers],['Takeaways',t.takeaways],
    ['Final score',s.score.usTotal+'-'+s.score.themTotal]].forEach(r=>rows.push(r));
   download(safeName(g.date+'_'+g.opponent)+'_stats.csv', toCSV(rows), 'text/csv');
   toast('Stat lines exported');
@@ -3823,6 +3826,7 @@ function renderSeason(){
       <tr><td>Total yards</td><td class="num">${(t.rushYds||0)+(t.passYds||0)}</td></tr>
       <tr><td>Turnovers lost</td><td class="num">${t.turnovers||0}</td></tr>
       <tr><td>Takeaways</td><td class="num">${t.takeaways||0}</td></tr>
+      <tr><td>Penalties</td><td class="num">${t.penCount||0}</td></tr>
       <tr><td>Penalty yards</td><td class="num">${t.penYds||0}</td></tr>
       </tbody></table></div></div>`;
     /* Scoring spans offence, defence and the kicking game, so it belongs with
