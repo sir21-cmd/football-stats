@@ -708,7 +708,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-84';
+const APP_VERSION = '2026.09.19-86';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2966,6 +2966,69 @@ function isStandalone(){
   return window.navigator.standalone === true ||
          (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 }
+/* Every iPhone and iPad, however the page got opened. iPadOS reports itself as
+   a Mac, so the touch-point count is what gives it away. */
+function isIOS(){
+  const n = window.navigator || {};
+  const ua = n.userAgent || '';
+  return /iPad|iPhone|iPod/.test(ua) ||
+         (/Macintosh/.test(ua) && (n.maxTouchPoints || 0) > 1);
+}
+/* Whether to lead with the route that does not depend on window.print().
+
+   Three containers were tried on one iPhone — home-screen app, in-app browser,
+   and Safari itself — and print did nothing in all three, while the same build
+   printed fine from an iPad. Which of them is at fault stopped being the
+   interesting question: the button that works has to be the FIRST one on any
+   iPhone or iPad, not the consolation prize underneath a dead one.
+
+   Desktops keep print first. It has never failed there. */
+function printIsUnreliable(){ return isStandalone() || isIOS(); }
+/* =========================================================================
+   PRINTING FROM A HOME-SCREEN APP
+
+   `window.print()` does nothing in an iOS home-screen web app. Not an error,
+   not a refusal — the button is simply inert, which is exactly how it was
+   reported: "the button was there and not active". The app already knew this
+   about downloads (see `download` below, which hands them to the share sheet);
+   the print button never learned the same lesson.
+
+   So on the sideline phone, printing means handing the report out as a file
+   the same way a backup goes out: AirDrop it to the laptop, mail it to the
+   coaches, or save it to Files and print from there. Everywhere else — Safari,
+   any desktop — `window.print()` still works and is still the first button.
+   ========================================================================= */
+/* The report as a file that stands on its own: the app's stylesheet travels
+   with it, and the print rules are applied on screen so it opens looking like
+   the printed page rather than like the app with its buttons cut off. */
+function reportDocHTML(title, sel){
+  const body = ($(sel || '#repBody') || {}).innerHTML || '';
+  const css  = $$('style').map(s => s.textContent).join('\n');
+  return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    + '<title>' + esc(title) + '</title>\n<style>\n' + css + '\n'
+    /* The app hides these while you are using it and reveals them on paper.
+       In a saved copy there is no "while you are using it". */
+    + '.noprint{display:none !important}\n.printonly{display:inline !important}\n'
+    + 'body{background:#fff; padding:14px}\nmain{padding:0; max-width:56rem; margin:0 auto}\n'
+    + '.tblwrap{overflow:visible}\n'
+    + '</style>\n</head>\n<body><main>' + body + '</main></body>\n</html>\n';
+}
+function shareReport(){
+  const g = game();
+  const name = safeName((g ? g.date + '_' + g.opponent : todayStr()) + '_report') + '.html';
+  const title = (g ? usName() + ' vs ' + g.opponent + ' · ' + g.date : usName()) + ' — game report';
+  sendDoc(name, title, '#repBody');
+}
+function shareSeason(){
+  sendDoc(safeName(usName() + '_season') + '.html', usName() + ' — season stats', '#seasonBody');
+}
+function sendDoc(name, title, sel){
+  download(name, reportDocHTML(title, sel), 'text/html');
+  toast(printIsUnreliable()
+    ? 'Sent to the share sheet — AirDrop it, mail it, or save it to Files and print from there'
+    : 'Saved as a file you can open and print', 3800);
+}
 async function download(name, text, mime){
   const blob=new Blob([text],{type:mime||'application/json'});
   // Home-screen apps on iOS can't do a normal file download — hand it to the
@@ -3066,7 +3129,9 @@ function wire(){
     switchView('game'); toast('Pick the play type — it will slot in at #'+n); };
   $('#devName').oninput=e=>{ DB.deviceName=e.target.value; save(); };
   $('#teamName').oninput=e=>{ DB.team.name=e.target.value; save(); renderTop(); };
-  $('#btnPrintSeason').onclick=()=>window.print();
+  /* Same story as the game report: inert in a home-screen app, so offer the
+     route that works instead of a button that does nothing. */
+  $('#btnPrintSeason').onclick=()=> printIsUnreliable() ? shareSeason() : window.print();
   $('#ruleSack').onchange=e=>{ DB.rules.sackAsRush=e.target.checked; save(); toast('Rule updated'); };
   $('#ruleTop').onchange=e=>{ DB.rules.trackTop=e.target.checked; save();
     toast(e.target.checked ? 'The app will ask for the clock at each change of possession'
@@ -3712,9 +3777,24 @@ function gameReportHTML(g,s,opts){
   h+=grp('Place kicking', T(COLS.kick, s.kicking, P));
   // the one section the MaxPreps sheet used to carry on its own
   h+=grp('Scoring summary', T(COLS.score, s.scoring, {empty:'No scoring', hideEmpty:true}));
-  if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px">
-    <button class="btn p" onclick="window.print()">Print / save as PDF</button>
-    <span class="small muted">One document: send it to the coaches and key MaxPreps from the same page.</span></div>`;
+  if(!opts.noPrint) h+= printIsUnreliable()
+    /* A home-screen app cannot print. Lead with the button that works, keep
+       the other one in case a future iOS fixes it, and say why rather than
+       leaving him tapping a dead control. */
+    ? `<div class="noprint" style="margin-top:12px">
+        <div class="row">
+          <button class="btn p" onclick="shareReport()">Send / save report</button>
+          <button class="btn" onclick="window.print()">Try print</button>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">One document: send it to the coaches and key
+        MaxPreps from the same page. <b>Print can do nothing at all on an iPhone</b> — that is iOS,
+        not the app — so <b>Send / save report</b> hands it to the share sheet instead. AirDrop it,
+        mail it, or save it to Files and print from there. If <b>Try print</b> works on your device,
+        use it; it does the same job in one step.</p></div>`
+    : `<div class="row noprint" style="margin-top:12px">
+        <button class="btn p" onclick="window.print()">Print / save as PDF</button>
+        <button class="btn" onclick="shareReport()">Send as a file</button>
+        <span class="small muted">One document: send it to the coaches and key MaxPreps from the same page.</span></div>`;
   h+='</div>';
   return h;
 }
@@ -4105,7 +4185,8 @@ function showHelp(){
     missing, then marks the game final.</p>
     <p>Then <b>Reports</b> → <b>Game report</b>. It is one document that covers both
     jobs: readable enough to send the coaching staff, and complete enough to key into
-    MaxPreps from the same page. Tap <b>Print / save as PDF</b> to send it or print it.</p>
+    MaxPreps from the same page. Tap <b>${printIsUnreliable()?'Send / save report':'Print / save as PDF'}</b>
+    to send it or print it.${printIsUnreliable()?' Printing straight from an iPhone is something iOS\u2019s\n    browser will not do, so the button hands the report to the share sheet instead \u2014 AirDrop it to a\n    laptop, mail it to the coaches, or save it to Files and print from there.':''}</p>
     <p>Also on that tab:</p>
     <ul>
       <li><b>Play log (CSV)</b> — every play, for a spreadsheet.</li>
