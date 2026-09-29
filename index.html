@@ -728,14 +728,20 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.19-95';
+const APP_VERSION = '2026.09.29-96';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
   ['INT','Interception'],['PD','Pass defended'],['FC','Fumble caused'],['FR','Fumble recovery'],
   ['HUR','Hurried QB'],['BK','Blocked kick'],['BPT','Blocked punt'],['SAF','Safety']
 ];
-const NEEDS_YDS = {SK:1, INT:1, FR:1};
+/* Which codes carry a yardage of their own. An interception and a fumble
+   recovery do: those are RETURN yards, and they are entered nowhere else.
+   A sack does not — its yardage is the yards lost on the play, which is
+   already typed into the play itself. Asking for it twice meant two numbers
+   for one fact, free to disagree, with the second of them costing a tap per
+   yard on a stepper with no presets. */
+const NEEDS_YDS = {INT:1, FR:1};
 /* the eight you use all night; the rest live behind "More" */
 const CORE_CODES = ['T','A','TFL','SK','INT','PD','FC','FR'];
 
@@ -1387,6 +1393,13 @@ function computeStats(g){
     }
 
     /* ---- our defense (recorded on any play) ---- */
+    /* A sack's yardage comes from the play, never from the tag. It is the
+       same fact as "Yards lost", so it cannot disagree with the offence's
+       book, and correcting the play afterwards corrects this with it. Shared
+       between everyone tagged SK — two men on one sack is 7 yards between
+       them, not 7 each — and handed out whole so the shares add up exactly. */
+    let skLeft = (p.type==='sack') ? Math.abs(p.yds||0) : 0;
+    let skN = (p.def||[]).filter(d => d.s==='SK' && d.n!=null && d.n!=='').length;
     (p.def||[]).forEach(d=>{
       if(d.n==null || d.n==='') return;
       const x=bump(S.defense,d.n,DS());
@@ -1394,7 +1407,12 @@ function computeStats(g){
         case 'T': x.t++; x.tot++; break;
         case 'A': x.a++; x.tot++; break;
         case 'TFL': x.tfl++; break;
-        case 'SK': x.sk++; x.skYds+=(d.y||0); break;
+        case 'SK': {
+          x.sk++;
+          const share = skN > 0 ? Math.round(skLeft / skN) : 0;
+          x.skYds += share; skLeft -= share; skN--;
+          break;
+        }
         case 'INT': x.int++; x.intYds+=(d.y||0); break;
         case 'PD': x.pd++; break;
         case 'FC': x.fc++; break;
@@ -3556,7 +3574,12 @@ function onEntryClick(e){
     if(k==='td'&&p[k]) p.fd=false;
     if(k==='retTd'&&p[k]) scoopYards(p);   // fill in the run back it can work out
     return renderEntry(); }
-  const rs=t.closest('[data-res]'); if(rs){ p.result=rs.dataset.res; if(p.result==='inc') p.yds=0; return renderEntry(); }
+  const rs=t.closest('[data-res]'); if(rs){ p.result=rs.dataset.res;
+    if(p.result==='inc') p.yds=0;
+    /* the only thing you ever tag on a sack is the sack — go straight to the
+       jersey numbers rather than making him find SK first */
+    if(p.result==='sack') UI.defStat='SK';
+    return renderEntry(); }
   const fg=t.closest('[data-fg]'); if(fg){ p.fgGood = fg.dataset.fg==='1'; return renderEntry(); }
   /* "Run" shows as selected the moment 2-point is chosen, so store it too —
      otherwise a conversion where he only picks the carrier saves with no type
