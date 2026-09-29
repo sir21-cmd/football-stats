@@ -728,7 +728,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.29-96';
+const APP_VERSION = '2026.09.29-97';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1400,17 +1400,52 @@ function computeStats(g){
        them, not 7 each — and handed out whole so the shares add up exactly. */
     let skLeft = (p.type==='sack') ? Math.abs(p.yds||0) : 0;
     let skN = (p.def||[]).filter(d => d.s==='SK' && d.n!=null && d.n!=='').length;
+
+    /* A sack IS a tackle, and so is a tackle for loss. The quarterback is the
+       ball carrier and somebody put him on the ground; the SK column says
+       what kind of tackle it was, not instead of one. His own sheet made the
+       case: two sacks and a TFL by three different men, and a TOT column
+       reading 1. No defender in football has ever had more sacks than
+       tackles, which is what you would see constantly if this were not so.
+
+       So the tackle comes with the stop, and he taps one code instead of
+       two. Three things it must not do:
+         · double-count. He has been tapping SK and T together all season,
+           and an explicit T or A on the same play is his own and wins.
+         · count twice for one stop. SK and TFL on the same man on the same
+           play is one tackle.
+         · call a shared stop a solo. Two men on one sack is an assist each,
+           because neither of them brought him down alone. */
+    const stopCodes = {SK:1, TFL:1};
+    const own = {};            // he tagged this man's tackle himself
+    const stoppers = [];       // everyone credited with a stop on this play
+    (p.def||[]).forEach(d=>{
+      const n = String(d.n);
+      if(d.n==null || d.n==='') return;
+      if(d.s==='T' || d.s==='A') own[n] = 1;
+      if(stopCodes[d.s] && stoppers.indexOf(n) < 0) stoppers.push(n);
+    });
+    const gotStop = {};
+    const creditStop = (row, num) => {
+      const n = String(num);
+      if(own[n] || gotStop[n]) return;
+      gotStop[n] = 1;
+      if(stoppers.length > 1) row.a++; else row.t++;
+      row.tot++;
+    };
+
     (p.def||[]).forEach(d=>{
       if(d.n==null || d.n==='') return;
       const x=bump(S.defense,d.n,DS());
       switch(d.s){
         case 'T': x.t++; x.tot++; break;
         case 'A': x.a++; x.tot++; break;
-        case 'TFL': x.tfl++; break;
+        case 'TFL': x.tfl++; creditStop(x, d.n); break;
         case 'SK': {
           x.sk++;
           const share = skN > 0 ? Math.round(skLeft / skN) : 0;
           x.skYds += share; skLeft -= share; skN--;
+          creditStop(x, d.n);
           break;
         }
         case 'INT': x.int++; x.intYds+=(d.y||0); break;
