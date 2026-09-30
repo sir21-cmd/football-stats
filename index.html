@@ -728,7 +728,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.30-98';
+const APP_VERSION = '2026.09.30-99';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2905,6 +2905,9 @@ function render(){
   if(UI.view==='game'){ renderEntry(); renderQuarterNudge(); renderRecent(); }
   if(UI.view==='plays') renderPlayList();
   if(UI.view==='stats') renderStats();
+  /* An open report follows the game. Quietly — no scrolling him back to the
+     top while he is reading it. */
+  if(UI.view==='reports' && UI.lastReport) runReport(UI.lastReport, {quiet:true});
   if(UI.view==='season') renderSeason();
   if(UI.view==='setup'){ renderRoster(); renderGameList();
     $('#devName').value=DB.deviceName||''; $('#teamName').value=DB.team.name||'';
@@ -3950,16 +3953,30 @@ function scoringListHTML(g){
 }
 
 /* ---------- reports ---------- */
-function runReport(kind){
+/* opts.quiet — a redraw the app asked for rather than a tap, so it must not
+   yank the page about under him.
+
+   The report used to be drawn once and then left alone. Every other tab is
+   rebuilt by render() when a play changes; this one was not, so a report run
+   before a play was added went on showing the game as it stood beforehand.
+   Reported from a live game: a sack logged for #55 that never appeared, with
+   the tag correct and the engine correct — it was the picture that was old.
+   That is the worst kind of wrong, because nothing looks broken. */
+function runReport(kind, opts){
+  opts = opts || {};
   const g=game();
-  if(!g){ toast('No game selected'); return; }
+  if(!g){ if(!opts.quiet) toast('No game selected'); return; }
   const s=computeStats(g);
   if(kind==='csvplays') return csvPlays(g);
   if(kind==='csvstats') return csvStats(g,s);
   if(kind==='backup')   return exportGame(g);
   const box=$('#repBody');
   box.innerHTML = gameReportHTML(g,s);
-  box.scrollIntoView({behavior:'smooth', block:'start'});
+  /* remembered so render() can keep it current; the export kinds above
+     return before this, because re-running a download on every keystroke
+     would be a disaster */
+  UI.lastReport = kind;
+  if(!opts.quiet) box.scrollIntoView({behavior:'smooth', block:'start'});
 }
 function repHead(g, title){
   const st=computeStats(g);
