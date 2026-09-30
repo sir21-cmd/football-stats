@@ -728,7 +728,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.29-97';
+const APP_VERSION = '2026.09.30-98';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1418,11 +1418,13 @@ function computeStats(g){
            because neither of them brought him down alone. */
     const stopCodes = {SK:1, TFL:1};
     const own = {};            // he tagged this man's tackle himself
+    const ownTfl = {};         // and his tackle for loss
     const stoppers = [];       // everyone credited with a stop on this play
     (p.def||[]).forEach(d=>{
       const n = String(d.n);
       if(d.n==null || d.n==='') return;
       if(d.s==='T' || d.s==='A') own[n] = 1;
+      if(d.s==='TFL') ownTfl[n] = 1;
       if(stopCodes[d.s] && stoppers.indexOf(n) < 0) stoppers.push(n);
     });
     const gotStop = {};
@@ -1445,6 +1447,13 @@ function computeStats(g){
           x.sk++;
           const share = skN > 0 ? Math.round(skLeft / skN) : 0;
           x.skYds += share; skLeft -= share; skN--;
+          /* The coach's rule, and the one college stat lines use: a sack is a
+             tackle for loss as well — it is the same stop, described twice.
+             The SACK column is the subset of TFLs that came on a pass. So the
+             TFL is counted here, unless he tagged one himself on this play,
+             which would make it two for one stop. The TACKLE is still one:
+             creditStop refuses to credit the same man twice on a play. */
+          if(!ownTfl[String(d.n)]) x.tfl++;
           creditStop(x, d.n);
           break;
         }
