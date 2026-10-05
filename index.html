@@ -728,7 +728,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.09.30-99';
+const APP_VERSION = '2026.10.05-101';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2767,7 +2767,12 @@ function clockContext(p){
   for(let i=idx-1; i>=0; i--){
     const x = g.plays[i];
     if((x.q||1) !== q) break;
-    if(x.clock != null){ out.from = x.clock; out.fromLabel = secsToClock(x.clock); out.fromIdx = i; break; }
+    /* Carry the play NUMBER of the reading we are measuring against. When a
+       reading is wrong — a 0:00 typed onto a play in the middle of a quarter —
+       it silently locks every reading after it, and "later than 0:00" reads
+       like the new number is at fault. Naming the play points at the real one. */
+    if(x.clock != null){ out.from = x.clock; out.fromLabel = secsToClock(x.clock);
+                         out.fromIdx = i; out.fromNo = i + 1; break; }
   }
   const start = (out.fromIdx==null ? 0 : out.fromIdx + 1);
   const covered = g.plays.slice(start, idx + 1).filter(x => (x.q||1)===q && consumesClock(x));
@@ -2781,7 +2786,7 @@ function clockContext(p){
 function askClock(p, then){
   const ctx = clockContext(p);
   if(!ctx){ if(then) then(); return; }
-  UI.clk = { id:p.id, then:then || null, ctx:ctx,
+  UI.clk = { id:p.id, then:then || null, ctx:ctx, had: p.clock != null,
              digits: p.clock!=null ? String(Math.floor(p.clock/60)) + String(p.clock%60).padStart(2,'0') : '' };
   openModal('Clock at change of possession', clockSheetHTML());
 }
@@ -2807,7 +2812,8 @@ function clockSheetHTML(){
 
   let note = '<span class="clknote hold">Tap the clock as it reads now</span>';
   if(badSecs) note = `<span class="clknote warn">${esc(s.digits.slice(-2))} isn't a number of seconds</span>`;
-  else if(tooLate) note = `<span class="clknote warn">Later than ${esc(ctx.fromLabel)} — the clock only counts down</span>`;
+  else if(tooLate) note = `<span class="clknote warn">Later than ${esc(ctx.fromLabel)}${
+    ctx.fromNo ? ' on play #'+ctx.fromNo : ''} — the clock only counts down</span>`;
   else if(secs != null && s.digits.length >= 3){
     const el = ctx.from - secs;
     const who = ctx.owner==='us' ? usName() : ctx.owner==='them' ? themName() : null;
@@ -2828,6 +2834,7 @@ function clockSheetHTML(){
     </div>
     <div class="clkbtns">
       <button class="btn" id="clkSkip">Skip</button>
+      ${s.had ? '<button class="btn bad" id="clkClear">Clear</button>' : ''}
       <button class="btn p" id="clkSave"${(!s.digits || bad) ? ' disabled' : ''}>Save</button>
     </div>
     <p class="tiny muted" style="text-align:center; margin:9px 0 0">
@@ -2853,9 +2860,13 @@ function clockSave(){
 }
 function clockClear(id){
   const g = game(); if(!g) return;
+  /* grab the caller's follow-up before closeModal drops UI.clk, so clearing
+     lands back on the times sheet exactly like saving does */
+  const then = (UI.clk && UI.clk.id === id) ? UI.clk.then : null;
   const p = g.plays.find(x => x.id === id);
   if(p){ delete p.clock; g.updatedAt = nowISO(); save(); }
-  closeModal(); render(); toast('Clock reading removed');
+  closeModal(); render();
+  if(then) then(); else toast('Clock reading removed');
 }
 function askNumber(title, value, cb){
   openModal(title, `<div class="field"><input type="number" id="askN" value="${value||0}" inputmode="numeric"></div>
@@ -3410,15 +3421,18 @@ function wire(){
     const i=e.target.closest('[data-inp]'); if(i){ E.p[i.dataset.inp]=i.value; }
   });
 
-  /* the times screen: open it from the stats tab, and tap any row to set or
-     change that reading */
-  $('#view-stats').addEventListener('click', e=>{
-    if(e.target.closest('#btnFixTimes')){
-      const g=game(); if(!g) return;
-      openModal('Fix times', timesHTML(g));
-      return;
-    }
-  });
+  /* The times screen. The button is drawn by topHTML, which runs in TWO
+     places — the Stats tab and the game report — but the click was only ever
+     delegated on #view-stats. On the Reports tab it therefore did nothing at
+     all: he tapped it through a whole game with four drives waiting for a
+     reading, and nothing happened. Same button, same handler, both tabs. */
+  const fixTimes = e => {
+    if(!e.target.closest('#btnFixTimes')) return;
+    const g=game(); if(!g) return;
+    openModal('Fix times', timesHTML(g));
+  };
+  $('#view-stats').addEventListener('click', fixTimes);
+  $('#view-reports').addEventListener('click', fixTimes);
   $('#modalBody').addEventListener('click', e=>{
     const row=e.target.closest('[data-timeid]'); if(!row || UI.clk) return;
     const g=game(); if(!g) return;
