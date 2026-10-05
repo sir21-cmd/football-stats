@@ -274,6 +274,7 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
 .badge.to{background:var(--bad); color:#fff}
 .badge.fd{background:#dbeafe; color:#1e40af}
 .badge.pen{background:#fef3c7; color:#92400e}
+.badge.qe{background:var(--ink); color:#fff}
 
 /* ---------- misc ---------- */
 .empty{text-align:center; color:var(--muted); padding:26px 14px}
@@ -728,7 +729,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-101';
+const APP_VERSION = '2026.10.05-103';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2436,6 +2437,38 @@ function formHTML(g){
         either side of it. Yardage, players and tags are untouched.</p></div>`;
     }
   }
+  /* The quarter a play ended.
+
+     "End of quarter" on the Game tab closes the quarter you are IN: it appends
+     a marker and moves the game on, which is right while you are scoring and
+     useless afterwards. Cleaning up a finished game you need to say that a play
+     forty rows back was the last one of its quarter — a field goal as time
+     expired. So the flag lives on the play too, and only ever on the play: it
+     marks the record and does not move the game on. The maths reads it from any
+     play, marker or not, so nothing downstream has to change. */
+  if(UI.editingId){
+    const g2 = game();
+    const saved = (g2.plays||[]).find(x=>x.id===UI.editingId);
+    if(saved && saved.type!=='note'){
+      const q = saved.q || 1;
+      const other = (g2.plays||[]).find(x => (x.q||1)===q && x.quarterEnd && x.id!==saved.id);
+      const otherNo = other ? g2.plays.indexOf(other)+1 : 0;
+      h+=`<div class="clkedit" style="margin-top:10px">
+        <label class="f" style="color:var(--accent)">End of quarter</label>
+        <div class="row tight" style="align-items:center">
+          <button class="btn${saved.quarterEnd?' go':''}" data-act="qend"
+            ${other?' disabled':''} style="min-width:104px">${
+            saved.quarterEnd ? 'Ends '+esc(qLabel(q)) : 'Mark it'}</button>
+          <span class="tiny muted grow">${other
+            ? esc(qLabel(q))+' already ends on play #'+otherNo+' — clear that one first'
+            : (saved.quarterEnd
+                ? 'This play was the last of '+esc(qLabel(q))+'. Tap to undo.'
+                : 'Tap if this was the last play of '+esc(qLabel(q))+'.')}</span>
+        </div>
+        <p class="tiny muted" style="margin:6px 0 0">Marks the record only — it does not move
+        the game on. Use <b>End of quarter</b> on the Game tab while you are scoring.</p></div>`;
+    }
+  }
   h+=`<div class="row" style="margin-top:14px">
       <button class="btn go grow" data-act="save">${UI.editingId?'Save changes':'Save play'}</button>
       ${UI.editingId?'<button class="btn bad sm" data-act="delete">Delete</button>':''}
@@ -2578,7 +2611,19 @@ function commitPlay(){
   const wasEdit = !!UI.editingId;
   if(wasEdit){
     const i=g.plays.findIndex(x=>x.id===UI.editingId);
-    if(i>=0) g.plays[i]=p;
+    /* The clock card in this form is the one control that writes straight to
+       the stored play rather than to the copy being edited — a reading is a
+       fact about a moment, so the keypad sets it and saves on the spot. The
+       copy was taken when the form opened and has never heard about it, so
+       writing the copy back wholesale would throw the reading away. It did:
+       set a time, press Save changes, and the time vanished. The stored play
+       wins on the clock alone; everything else on it comes from the form. */
+    if(i>=0){
+      const live = g.plays[i];
+      if(live.clock != null) p.clock = live.clock; else delete p.clock;
+      if(live.quarterEnd) p.quarterEnd = true; else delete p.quarterEnd;
+      g.plays[i]=p;
+    }
     UI.editingId=null;
     // Correcting the most recent play has to move the ball with it — otherwise
     // a 5-yard run fixed to 6 leaves you on 2nd & 5 instead of 2nd & 4.
@@ -2991,6 +3036,11 @@ function playBadges(p){
   if(p.int||p.fumLost) b+='<span class="badge to">TO</span>';
   if(p.type==='penalty') b+='<span class="badge pen">PEN</span>';
   if(isSafety(p)) b+='<span class="badge to">SAF</span>';
+  /* A real play can be the one that ended a quarter — a field goal as time
+     expires, a kneel on the horn. Say so on the card, or the only way to know
+     which play closed the quarter is to open it. Markers of their own carry
+     the words already, so they do not need it twice. */
+  if(p.quarterEnd && p.type!=='note') b+=`<span class="badge qe">END ${esc(qLabel(p.q||1))}</span>`;
   return b;
 }
 function defSummary(p){
@@ -3558,6 +3608,21 @@ function onEntryClick(e){
       const g=game(); if(!g) return;
       const saved=g.plays.find(x=>x.id===UI.editingId); if(!saved) return;
       return askClock(saved, ()=>renderEntry());
+    }
+    /* the quarter-end flag on a play being edited. Like the clock it is a fact
+       about the moment rather than a field on the form, so it writes to the
+       stored play and saves on the spot — and commitPlay carries it across the
+       same way, so Save changes cannot throw it away. */
+    if(act.dataset.act==='qend'){
+      const g=game(); if(!g) return;
+      const saved=g.plays.find(x=>x.id===UI.editingId); if(!saved) return;
+      const q=saved.q||1;
+      if(!saved.quarterEnd && g.plays.some(x=>(x.q||1)===q && x.quarterEnd && x.id!==saved.id)){
+        toast(qLabel(q)+' already ends on another play'); return;
+      }
+      if(saved.quarterEnd){ delete saved.quarterEnd; toast(qLabel(q)+' no longer ends here'); }
+      else { saved.quarterEnd=true; toast('Marked as the last play of '+qLabel(q)); }
+      g.updatedAt=nowISO(); save(); renderEntry(); return;
     }
     if(act.dataset.act==='clockclear'){
       const g=game(); if(!g) return;
