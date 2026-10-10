@@ -729,7 +729,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-107';
+const APP_VERSION = '2026.10.05-108';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1229,8 +1229,20 @@ function computeStats(g){
       if(on==='us'){ T.penYds+=p.penYds; T.penCount++; }
       else { T.oppPenYds+=p.penYds; T.oppPenCount++; }
     }
-    if(ours && (p.type==='run'||p.type==='pass') && p.down===3){ T.thirdAtt++; if(p.fd) T.thirdConv++; }
-    if(ours && (p.type==='run'||p.type==='pass') && p.down===4){ T.fourthAtt++; if(p.fd) T.fourthConv++; }
+    /* A touchdown converts the down. It sounds too obvious to need saying, and
+       that is exactly why it went unnoticed: `fd` is only ever set on a play
+       that moved the chains and did NOT score — commitPlay skips the first-down
+       check entirely when `p.td` is on, because a touchdown has no next down to
+       have won. So a fourth-down touchdown counted as a fourth-down attempt and
+       a fourth-down FAILURE. Cabrini, 9 October 2026: Josh Zboril's 26-yard
+       catch on 4th & 11 made the app read 0 for 1 on fourth down.
+
+       It must be a touchdown WE scored. Fumble it into their end zone on
+       fourth down and `p.td` is true while `scoreBy` is theirs, which is not a
+       conversion by anybody's reckoning. */
+    const downConv = p.fd || (p.td && (p.scoreBy || p.poss) === p.poss);
+    if(ours && (p.type==='run'||p.type==='pass') && p.down===3){ T.thirdAtt++; if(downConv) T.thirdConv++; }
+    if(ours && (p.type==='run'||p.type==='pass') && p.down===4){ T.fourthAtt++; if(downConv) T.fourthConv++; }
 
     /* ---- onside kicks, both directions ----
        Counted here rather than down in the two possession branches because the
