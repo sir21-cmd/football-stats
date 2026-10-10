@@ -729,7 +729,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-103';
+const APP_VERSION = '2026.10.05-105';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1184,11 +1184,12 @@ function rows(map){ return Object.values(map).sort((a,b)=>(parseInt(a.num,10)||9
 function computeStats(g){
   const S = {
     rushing:{}, passing:{}, receiving:{}, defense:{}, scoring:{},
-    puntRet:{}, koRet:{}, punts:{}, kickoffs:{}, kicking:{},
+    puntRet:{}, koRet:{}, punts:{}, kickoffs:{}, kicking:{}, onside:{},
     team:{ firstDowns:0, penYds:0, penCount:0, rushAtt:0, rushYds:0, passComp:0, passAtt:0,
            passYds:0, passInt:0, sacksAllowed:0, fumbles:0, fumblesLost:0, turnovers:0, plays:0,
            tdTotal:0, oppFirstDowns:0, oppPenYds:0, oppPenCount:0, oppRushYds:0, oppPassYds:0, oppTurnovers:0,
            oppRushAtt:0, oppPassAtt:0, oppPassComp:0, sacksBy:0,
+           onsideAtt:0, onsideRec:0, oppOnsideAtt:0, oppOnsideRec:0,
            takeaways:0, thirdConv:0, thirdAtt:0, fourthConv:0, fourthAtt:0 },
     score:{ us:[0,0,0,0,0], them:[0,0,0,0,0], usTotal:0, themTotal:0 },
     drives:[]
@@ -1203,6 +1204,12 @@ function computeStats(g){
   const PU=()=>({no:0,yds:0,long:0,in20:0,blk:0});
   const KO=()=>({no:0,yds:0,long:0,tb:0});
   const KI=()=>({fgm:0,fga:0,fgLong:0,patm:0,pata:0});
+  /* Onside kicks get a line of their own. `att` is the kicker's; `okr` and
+     `opp` belong to whoever fell on the ball — our own onside kick and theirs
+     respectively. The kick itself still counts in the kickoff table exactly as
+     it did before: a short kick is still a kick, and taking it out would move
+     a number that has been printed all season. */
+  const OK=()=>({att:0,okr:0,opp:0});
 
   (g.plays||[]).forEach(p=>{
     const ours = p.poss==='us';
@@ -1223,6 +1230,30 @@ function computeStats(g){
     }
     if(ours && (p.type==='run'||p.type==='pass') && p.down===3){ T.thirdAtt++; if(p.fd) T.thirdConv++; }
     if(ours && (p.type==='run'||p.type==='pass') && p.down===4){ T.fourthAtt++; if(p.fd) T.fourthConv++; }
+
+    /* ---- onside kicks, both directions ----
+       Counted here rather than down in the two possession branches because the
+       play is symmetrical and the branches are not: the man who comes down with
+       the ball is ours either way, while the attempt belongs to whoever kicked
+       it. `recovered` always means the KICKING team got it back, so on their
+       kick the recovery is ours precisely when that flag is off. Only our own
+       players ever reach a stat line, so their recoveries of their own onside
+       kicks touch the team line and nothing else. */
+    if(p.type==='kickoff' && p.onside){
+      const kickingTeamGotIt = !!p.recovered;
+      if(ours){
+        T.onsideAtt++;
+        bump(S.onside, p.kicker, OK()).att++;
+        if(kickingTeamGotIt){
+          T.onsideRec++;
+          if(p.onsideBy!=null && p.onsideBy!=='') bump(S.onside, p.onsideBy, OK()).okr++;
+        }
+      } else {
+        T.oppOnsideAtt++;
+        if(kickingTeamGotIt) T.oppOnsideRec++;
+        else if(p.onsideBy!=null && p.onsideBy!=='') bump(S.onside, p.onsideBy, OK()).opp++;
+      }
+    }
 
     /* ---- our offense ---- */
     /* A touchdown on OUR play is not automatically OURS. Fumble it away and let
@@ -1501,7 +1532,7 @@ function computeStats(g){
     rushing:fix(S.rushing), passing:fix(S.passing), receiving:fix(S.receiving),
     defense:rows(S.defense), scoring:rows(S.scoring).map(r=>{ r.pts=scorePts(r); return r; }),
     puntRet:fix(S.puntRet), koRet:fix(S.koRet), punts:rows(S.punts),
-    kickoffs:rows(S.kickoffs), kicking:rows(S.kicking),
+    kickoffs:rows(S.kickoffs), kicking:rows(S.kicking), onside:rows(S.onside),
     team:T, score:S.score, top:possessionTime(g)
   };
 }
@@ -2023,6 +2054,33 @@ function scoopHTML(p, ours){
   return '<hr><h3>Scored by</h3>' + chipsHTML('retBy', who) +
     (who == null ? '<p class="tiny muted" style="margin:5px 0 0">Tag the recovery below, or pick whoever took it in.</p>' : '');
 }
+/* =========================================================================
+   ONSIDE KICK RECOVERY
+
+   `recovered` has always meant "the kicking team came down with it", so the
+   ball is ours on our own onside kick when it is ON, and on theirs when it is
+   OFF. Either way the man who fell on it is one of ours and wants naming.
+
+   Before this he could only be named with an FR tag on the defensive panel,
+   which also means "fumble recovery" — and that overloading is what made the
+   flags on Cabrini play #93 impossible to clear by hand. `onsideBy` is a field
+   of its own so the FR tag can go back to meaning one thing.
+   ========================================================================= */
+function onsideIsOurs(p){
+  if(!p || p.type!=='kickoff' || !p.onside) return false;
+  return p.poss==='us' ? !!p.recovered : !p.recovered;
+}
+/* Shown only when our man actually has the ball — an onside kick the other
+   team recovers never asks for one of our names, and an ordinary kickoff
+   never sees this row at all. */
+function onsideHTML(p){
+  if(!onsideIsOurs(p)) return '';
+  const tagged = ((p.def||[]).find(d=>d.s==='FR') || {}).n;
+  const who = p.onsideBy != null ? p.onsideBy : (tagged != null ? tagged : null);
+  return '<hr><h3>Recovered by</h3>' + chipsHTML('onsideBy', who) +
+    (who == null ? '<p class="tiny muted" style="margin:5px 0 0">Whoever came down with the ball.</p>' : '');
+}
+
 /* The app knows the yard line, so it should do the arithmetic rather than leave
    it to you at eleven at night. Only ever fills a number you have not touched. */
 function scoopYards(p){
@@ -2108,7 +2166,16 @@ function syncTurnoverFromTags(p){
        only mean their returner put it on the ground and we came down with it.
        On a kick THEY made it is ambiguous — our own returner may have fallen on
        his own muff — so that one still wants the flag tapped by hand. */
-    if(p.poss==='us'){
+    /* An onside kick is the exception to all of that. The ball is live off the
+       tee, so the man who comes down with it has not recovered a fumble — the
+       FR tag is simply the only way the app has of naming him. Inferring a
+       turnover from it books a takeaway nobody earned, and because _toByTag is
+       stripped before a play is saved, the escape hatch below can never fire on
+       a reloaded play: the flags become unclearable by hand. So on an onside
+       kick nothing is inferred either way, and whatever was tapped stands.
+       (Cabrini, 9 October 2026, play #93 — recovered our own onside kick and
+       the fumble flags came back on every single save.) */
+    if(p.poss==='us' && !p.onside){
       if(has('FR')){
         if(!p.fumLost){ p.fum=true; p.fumLost=true; p._toByTag=true; }
       } else if(p._toByTag && p.fumLost){
@@ -2345,6 +2412,7 @@ function formHTML(g){
                  {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'good'},
                  {k:'recTd',label:'Recovered for TD',on:p.recTd,kind:'good'});
     h+=flagHTML(fl);
+    h+=onsideHTML(p);
     h+=prev;
     if(showsDefPanel(E.type,p.poss)) h+=defPanelHTML();
   }
@@ -2563,6 +2631,28 @@ function commitPlay(){
   syncTurnoverFromTags(p);        // in case the flag was never touched by hand
   delete p._toByTag;              // internal only — never saved onto a play
   if(p.fumLost) p.fum = true;     // a turnover is a fumble; never store one without the other
+  /* A kick form has no Fumble chip of its own — "Fumble turnover" is the only
+     fumble control it offers — so `fum` has to track it. Otherwise a bare
+     `fum` left behind by an earlier edit is unreachable: there is no button
+     that can turn it off, and on a kick THEY made it still adds one to our
+     team fumble count for the rest of the season. */
+  if(p.type==='punt' || p.type==='kickoff') p.fum = !!p.fumLost;
+  /* Onside recovery. The name only belongs on a play where one of ours
+     actually came down with the ball, so anything else drops it rather than
+     leaving a stat hanging off a play that cannot justify it — the same rule
+     the defensive tags get two lines above.
+
+     And the carry-over: a play recorded before this field existed named its
+     recoverer with an FR tag, because that was the only way. On its first save
+     the name moves across on its own, so an onside kick already in the book is
+     credited without being re-entered. The tag itself is left exactly where it
+     is — nothing is deleted on the strength of a guess. */
+  if(onsideIsOurs(p)){
+    if(p.onsideBy == null || p.onsideBy === ''){
+      const tagged = ((p.def||[]).find(d=>d.s==='FR') || {}).n;
+      if(tagged != null) p.onsideBy = tagged;
+    }
+  } else p.onsideBy = null;
   syncSafetyFromTags(p);          // two points, and a free kick to come
   if(p.type==='pat'){ p.twoPt = p.patKind==='two'; if(!p.twoPt) p.twoPtGood=false; else p.patGood=false; }
   /* A gain that reaches the end zone is a touchdown, whether or not the flag
@@ -2650,6 +2740,7 @@ function commitPlay(){
   // remember frequently used players
   remember('rusher',p.rusher); remember('passer',p.passer); remember('receiver',p.receiver);
   remember('punter',p.punter); remember('kicker',p.kicker); remember('returner',p.returner);
+  remember('onsideBy',p.onsideBy);
 
   g.updatedAt=nowISO(); save();
   E=null;
@@ -3796,6 +3887,10 @@ const COLS = {
       {k:'long',l:'Long',sum:1,tf:LONGTF('long')},{k:'tb',l:'TB',sum:1}],
   kick:[C_NUM,C_NAME,{k:'fgm',l:'FG',f:r=>r.fgm+'/'+r.fga,tf:(t,rows)=>SUM(rows,'fgm')+'/'+SUM(rows,'fga')},{k:'fgLong',l:'Long',sum:1,tf:LONGTF('fgLong')},
         {k:'patm',l:'PAT',f:r=>r.patm+'/'+r.pata,tf:(t,rows)=>SUM(rows,'patm')+'/'+SUM(rows,'pata')}],
+  /* Att is the kicker's, OKR and Opp belong to whoever fell on the ball — ours
+     and theirs respectively. No distance: an onside kick is a 10-yard squib
+     every time, and the yardage already prints in the kickoff table. */
+  onside:[C_NUM,C_NAME,{k:'att',l:'Att',sum:1},{k:'okr',l:'OKR',sum:1},{k:'opp',l:'Opp',sum:1,opt:1}],
   score:[C_NUM,C_NAME,{k:'tdRun',l:'TD Run',sum:1},{k:'tdRec',l:'TD Rec',sum:1},{k:'tdMisc',l:'TD Misc',sum:1},
          {k:'patMade',l:'PAT',f:r=>r.patMade+'/'+r.patAtt,tf:(t,rows)=>SUM(rows,'patMade')+'/'+SUM(rows,'patAtt')},{k:'convRun',l:'2pt Run',sum:1},{k:'convRec',l:'2pt Rec',sum:1},{k:'convDef',l:'2pt Def',sum:1,opt:1},
          {k:'fgMade',l:'FG',f:r=>r.fgMade+'/'+r.fgAtt,tf:(t,rows)=>SUM(rows,'fgMade')+'/'+SUM(rows,'fgAtt')},{k:'fgLong',l:'FG Lg',sum:1,tf:LONGTF('fgLong')},{k:'saf',l:'Saf',sum:1},{k:'pts',l:'Pts',sum:1}]
@@ -3819,6 +3914,10 @@ function renderStats(){
     h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
     h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None', hideEmpty:true}));
     h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
+    /* Most weeks nobody onside-kicks, and a section that says "None" on every
+       report all season is pure noise. Unlike Punting or Kickoffs, which happen
+       every game, this one only appears when there is something in it. */
+    if(s.onside.length) h+=grp('Onside kicks', T(COLS.onside, s.onside, {empty:'None', hideEmpty:true}));
   }
   if(UI.statSide==='team'){ h+=topHTML(g,s)+teamHTML(g,s); }
   h+='</div>';
@@ -4012,6 +4111,10 @@ function teamHTML(g,s,opts){
     ${line('3rd down', t.thirdConv+'/'+t.thirdAtt, '—')}
     ${line('4th down', t.fourthConv+'/'+t.fourthAtt, '—')}
     ${line('Sacks', t.sacksBy, t.sacksAllowed)}
+    ${(t.onsideAtt||t.oppOnsideAtt)
+       ? line('Onside kicks', (t.onsideRec||0)+' / '+(t.onsideAtt||0),
+                              (t.oppOnsideRec||0)+' / '+(t.oppOnsideAtt||0))
+       : ''}
     </tbody></table></div></div>`;
   if(opts.scoringSummary!==false)
     h+=`<div class="statgrp"><h3>Scoring summary</h3>${T(COLS.score, s.scoring, {empty:'No scoring yet'})}</div>`;
@@ -4089,6 +4192,7 @@ function gameReportHTML(g,s,opts){
   h+=grp('Punting', T(COLS.punt, s.punts, P));
   h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, P));
   h+=grp('Place kicking', T(COLS.kick, s.kicking, P));
+  if(s.onside.length) h+=grp('Onside kicks', T(COLS.onside, s.onside, {empty:'None', hideEmpty:true}));
   // the one section the MaxPreps sheet used to carry on its own
   h+=grp('Scoring summary', T(COLS.score, s.scoring, {empty:'No scoring', hideEmpty:true}));
   if(!opts.noPrint) h+=`<div class="row noprint" style="margin-top:12px">
@@ -4130,12 +4234,15 @@ function csvStats(g,s){
   push('PUNTING', [['Punts',r=>r.no],['Yards',r=>r.yds],['Long',r=>r.long],['In 20',r=>r.in20]], s.punts);
   push('KICKOFFS', [['KO',r=>r.no],['Yards',r=>r.yds],['Long',r=>r.long],['TB',r=>r.tb]], s.kickoffs);
   push('KICKING', [['FGM',r=>r.fgm],['FGA',r=>r.fga],['FG long',r=>r.fgLong],['PAT made',r=>r.patm],['PAT att',r=>r.pata]], s.kicking);
+  push('ONSIDE KICKS', [['Att',r=>r.att],['OKR',r=>r.okr],['Opp OKR',r=>r.opp]], s.onside);
   push('SCORING', [['TD run',r=>r.tdRun],['TD rec',r=>r.tdRec],['TD misc',r=>r.tdMisc],['PAT made',r=>r.patMade],
     ['PAT att',r=>r.patAtt],['2pt run',r=>r.convRun],['2pt rec',r=>r.convRec],['FG made',r=>r.fgMade],['FG att',r=>r.fgAtt],['Safety',r=>r.saf]], s.scoring);
   rows.push(['TEAM']);
   const t=s.team;
   [['First downs',t.firstDowns],['Rushing yards',t.rushYds],['Passing yards',t.passYds],['Total yards',t.totalYards],
    ['Penalties',t.penCount],['Penalty yards',t.penYds],['Turnovers',t.turnovers],['Takeaways',t.takeaways],
+   ['Onside kicks',(t.onsideRec||0)+'/'+(t.onsideAtt||0)],
+   ['Onside kicks against',(t.oppOnsideRec||0)+'/'+(t.oppOnsideAtt||0)],
    ['Final score',s.score.usTotal+'-'+s.score.themTotal]].forEach(r=>rows.push(r));
   download(safeName(g.date+'_'+g.opponent)+'_stats.csv', toCSV(rows), 'text/csv');
   toast('Stat lines exported');
@@ -4143,7 +4250,7 @@ function csvStats(g,s){
 
 /* ---------- season ---------- */
 function seasonStats(){
-  const acc={rushing:{},passing:{},receiving:{},defense:{},puntRet:{},koRet:{},punts:{},kickoffs:{},kicking:{},scoring:{}};
+  const acc={rushing:{},passing:{},receiving:{},defense:{},puntRet:{},koRet:{},punts:{},kickoffs:{},kicking:{},onside:{},scoring:{}};
   const team={};
   DB.games.forEach(g=>{
     const s=computeStats(g);
@@ -4183,6 +4290,10 @@ function renderSeason(){
     h+=grp('Punting', T(COLS.punt, s.punts, {empty:'None', hideEmpty:true}));
     h+=grp('Kickoffs', T(COLS.ko, s.kickoffs, {empty:'None', hideEmpty:true}));
     h+=grp('Place kicking', T(COLS.kick, s.kicking, {empty:'None', hideEmpty:true}));
+    /* Most weeks nobody onside-kicks, and a section that says "None" on every
+       report all season is pure noise. Unlike Punting or Kickoffs, which happen
+       every game, this one only appears when there is something in it. */
+    if(s.onside.length) h+=grp('Onside kicks', T(COLS.onside, s.onside, {empty:'None', hideEmpty:true}));
   }
   if(UI.seasonSide==='games'){
     let w=0,l=0,tt=0;
@@ -4430,6 +4541,13 @@ function showHelp(){
       <li><b>KICKOFF</b> — the kicker, where it landed, and the return. If the kick
       goes <b>out of bounds</b>, tap that flag: it books the 15-yard penalty on the
       kicking team and puts the ball on the receiving team's 35, with no return.</li>
+      <li><b>ONSIDE KICK</b> — tap <b>Onside</b>, then say who came down with it.
+      "<b>Shrine recovered</b>" always means the <i>kicking</i> team got it back, so
+      tick it on your own onside kick and leave it off on theirs. Either way, if the
+      ball is yours a <b>Recovered by</b> row appears for the man who fell on it, and
+      he gets an <b>OKR</b> on the onside kicks table. Do not tag it as a fumble:
+      the ball is live off the tee and nobody turned anything over. The kick still
+      counts in your kicker's kickoff line, short as it is.</li>
       <li><b>FIELD GOAL</b> — the kicker and the distance, good or no good.</li>
       <li><b>Extra point / 2-pt</b> — the app usually offers this on its own right
       after a touchdown, so you rarely tap it yourself.</li>
