@@ -729,7 +729,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-108';
+const APP_VERSION = '2026.10.05-109';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1190,7 +1190,8 @@ function computeStats(g){
            tdTotal:0, oppFirstDowns:0, oppPenYds:0, oppPenCount:0, oppRushYds:0, oppPassYds:0, oppTurnovers:0,
            oppRushAtt:0, oppPassAtt:0, oppPassComp:0, sacksBy:0,
            onsideAtt:0, onsideRec:0, oppOnsideAtt:0, oppOnsideRec:0,
-           takeaways:0, thirdConv:0, thirdAtt:0, fourthConv:0, fourthAtt:0 },
+           takeaways:0, thirdConv:0, thirdAtt:0, fourthConv:0, fourthAtt:0,
+           oppThirdConv:0, oppThirdAtt:0, oppFourthConv:0, oppFourthAtt:0 },
     score:{ us:[0,0,0,0,0], them:[0,0,0,0,0], usTotal:0, themTotal:0 },
     drives:[]
   };
@@ -1240,9 +1241,31 @@ function computeStats(g){
        It must be a touchdown WE scored. Fumble it into their end zone on
        fourth down and `p.td` is true while `scoreBy` is theirs, which is not a
        conversion by anybody's reckoning. */
+    /* A sack on 3rd & 10 is a third down you failed to convert. It was left out
+       of the denominator for no better reason than that the test named run and
+       pass and nobody revisited it — Shrine read 2 of 5 against Cabrini when
+       the truth was 2 of 6.
+
+       (A kneel to end the half is arguably not a conversion anybody attempted,
+       but the app has no kneel flag — a knee is logged as a run — so there is
+       nothing to test for and nothing is special-cased. If that ever matters,
+       the flag has to come first.) */
+    const downSnap = p.type==='run' || p.type==='pass' || p.type==='sack';
     const downConv = p.fd || (p.td && (p.scoreBy || p.poss) === p.poss);
-    if(ours && (p.type==='run'||p.type==='pass') && p.down===3){ T.thirdAtt++; if(downConv) T.thirdConv++; }
-    if(ours && (p.type==='run'||p.type==='pass') && p.down===4){ T.fourthAtt++; if(downConv) T.fourthConv++; }
+    if(downSnap && (p.down===3 || p.down===4)){
+      /* Both sides. Every other row in the team block compares the two teams,
+         and this one printed a dash down the opponent column from the day it
+         was written — not because the data was missing (every play carries its
+         down) but because nobody counted it. Cabrini were 7 of 11 on third
+         down against us on 9 October and the report had no way to say so. */
+      if(p.down===3){
+        if(ours){ T.thirdAtt++;    if(downConv) T.thirdConv++; }
+        else    { T.oppThirdAtt++; if(downConv) T.oppThirdConv++; }
+      } else {
+        if(ours){ T.fourthAtt++;    if(downConv) T.fourthConv++; }
+        else    { T.oppFourthAtt++; if(downConv) T.oppFourthConv++; }
+      }
+    }
 
     /* ---- onside kicks, both directions ----
        Counted here rather than down in the two possession branches because the
@@ -4137,8 +4160,8 @@ function teamHTML(g,s,opts){
     ${line('Yards per play', avg(t.totalYards,t.scrimPlays), avg(t.oppTotalYards,t.oppScrimPlays), 1)}
     ${line('Turnovers lost', t.turnovers, t.takeaways)}
     ${line('Penalties', (t.penCount||0)+'-'+(t.penYds||0), (t.oppPenCount||0)+'-'+(t.oppPenYds||0))}
-    ${line('3rd down', t.thirdConv+'/'+t.thirdAtt, '—')}
-    ${line('4th down', t.fourthConv+'/'+t.fourthAtt, '—')}
+    ${line('3rd down', t.thirdConv+'/'+t.thirdAtt, (t.oppThirdConv||0)+'/'+(t.oppThirdAtt||0))}
+    ${line('4th down', t.fourthConv+'/'+t.fourthAtt, (t.oppFourthConv||0)+'/'+(t.oppFourthAtt||0))}
     ${line('Sacks', t.sacksBy, t.sacksAllowed)}
     </tbody></table></div></div>`;
   /* No onside kick line here. It had one for a day and it did not earn its
@@ -4272,6 +4295,9 @@ function csvStats(g,s){
   const t=s.team;
   [['First downs',t.firstDowns],['Rushing yards',t.rushYds],['Passing yards',t.passYds],['Total yards',t.totalYards],
    ['Penalties',t.penCount],['Penalty yards',t.penYds],['Turnovers',t.turnovers],['Takeaways',t.takeaways],
+   ['3rd down',t.thirdConv+'/'+t.thirdAtt],['4th down',t.fourthConv+'/'+t.fourthAtt],
+   ['Opp 3rd down',(t.oppThirdConv||0)+'/'+(t.oppThirdAtt||0)],
+   ['Opp 4th down',(t.oppFourthConv||0)+'/'+(t.oppFourthAtt||0)],
    ['Final score',s.score.usTotal+'-'+s.score.themTotal]].forEach(r=>rows.push(r));
   download(safeName(g.date+'_'+g.opponent)+'_stats.csv', toCSV(rows), 'text/csv');
   toast('Stat lines exported');
