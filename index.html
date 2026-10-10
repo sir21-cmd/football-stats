@@ -729,7 +729,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-109';
+const APP_VERSION = '2026.10.05-112';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -939,6 +939,14 @@ function endsPossession(p){
      taken at the touchdown already marks where their possession starts. */
   if(p.type==='kickoff') return false;
   if(p.td || isSafety(p) || p.type==='fg' || p.type==='punt' || p.int || p.fumLost) return true;
+  /* A note ends nothing. It has to be said out loud because the test below
+     reads a difference between a play's side and the side holding the ball
+     after it as a turnover on downs — and a note's side means "who it is
+     about", which is routinely the team WITHOUT the ball. Without this line,
+     fixing the possession bug above would have quietly put a phantom change
+     of possession in the quarter totals every time a note was tagged to the
+     other side: a visible bug traded for an invisible one. */
+  if(p.type==='note') return false;
   return !!(p.sitAfter && p.sitAfter.poss && p.sitAfter.poss !== p.poss);   // turned over on downs
 }
 
@@ -2276,9 +2284,17 @@ function switchType(type){
   renderEntry();
 }
 /* Flip which team ran the play, and rebuild the form around it. */
+/* The one phrase the note field is used for, written the same way every time. */
+function timeoutText(poss){ return (poss==='us' ? usName() : themName()) + ' timeout'; }
+
 function switchPoss(poss){
   if(!E || E.p.poss===poss) return;
   const p = E.p;
+  /* A note already reading "Shrine timeout" should say "Cabrini timeout" the
+     moment the toggle moves — it is the same note about the other team. Only
+     when the text is exactly what the button wrote, though: anything typed by
+     hand is his, and gets left alone. */
+  if(E.type==='note' && p.note === timeoutText(p.poss)) p.note = timeoutText(poss);
   p.poss = poss;
   delete p.scoreBy;                    // re-derived on save from the new possession
   ['rusher','passer','receiver','returner','kicker','punter'].forEach(k=> p[k]=null);
@@ -2509,6 +2525,15 @@ function formHTML(g){
   else if(E.type==='note'){
     h+=`<div class="field"><label class="f">Note</label>
         <input type="text" data-inp="note" value="${esc(p.note||'')}" placeholder="Timeout, injury, end of quarter…"></div>`;
+    /* Nearly every note written all season has been a timeout, spelled four
+       different ways — "Knights timeout ", "Timeout Cabrini", "Early timeout",
+       "Timeout". One tap writes it the same way every time, with the team the
+       toggle is on, so the log reads consistently without anybody typing on a
+       sideline. The team toggle no longer moves the ball (-111), so picking
+       the side that called it is now free. */
+    h+=`<div class="flags" style="margin-top:7px">
+        <button class="flag xs" data-notefill="${esc(timeoutText(p.poss))}">${esc(timeoutText(p.poss))}</button>
+      </div>`;
   }
 
   // somewhere to write down what the numbers can't say — "bad snap", "trick play"
@@ -2848,7 +2873,15 @@ function nextSitBase(sit, p){
     else if(!p.replay){ s.dist = Math.max(1, sit.dist - gain); }
     return s;
   }
-  if(p.type==='note') return s;
+  /* A note never moves the ball. On every other play type `poss` means "who
+     had it"; on a note it means "who is this about", and returning the note's
+     own side handed possession to whoever the note mentioned. Log a timeout
+     for the team that does NOT have the ball and the ball changed hands —
+     down, distance and yard line all unchanged, so the only tell was two words
+     in the top bar and you found out three plays later.
+     (Western International play #75: Shrine kicked off, Western had it on
+     their own 20, Shrine called a timeout, and the app said Shrine ball.) */
+  if(p.type==='note'){ s.poss = sit.poss; return s; }
 
   /* After a safety the team that was pinned in its own end zone free-kicks
      from its own 20 — it does NOT hand the other side a first down there.
@@ -3774,6 +3807,8 @@ function onEntryClick(e){
   }
   const ep=t.closest('[data-eposs]'); if(ep) return switchPoss(ep.dataset.eposs);
   const et=t.closest('[data-etype]'); if(et) return switchType(et.dataset.etype);
+  const nf=t.closest('[data-notefill]');
+  if(nf){ p.note = nf.dataset.notefill; return renderEntry(); }
   const pick=t.closest('[data-pick]');
   if(pick){
     const role=pick.dataset.pick, num=pick.dataset.num;
