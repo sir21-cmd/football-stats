@@ -121,57 +121,79 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
    the edge is absorbed inside, not added on top.
    ======================================================================= */
 .fieldbox{position:relative; padding-top:17px; margin:6px 0 2px}
-.fchip{position:absolute; top:0; transform:translateX(-50%); z-index:6;
+.fchip{position:absolute; top:0; transform:translateX(-50%); z-index:7;
   background:var(--ink); color:#fff; font-style:normal; font-size:.58rem; font-weight:800;
   letter-spacing:.04em; padding:2px 7px; border-radius:999px; white-space:nowrap;
   box-shadow:0 1px 3px rgba(15,23,42,.35)}
-.gridiron{position:relative; height:42px; border-radius:7px; overflow:hidden;
-  border:1px solid #1c5f34; margin:0}
+/* The field is a trapezoid seen from slightly above — top edge is
+   FIELD_TOP_RATIO of the bottom — so it cannot be a rounded box with a border:
+   the corners have to be empty for the shape to read. Turf and lines are SVG
+   stretched to the width; everything circular or lettered is HTML on top,
+   because a stretched viewBox turns circles into ellipses and squashes text. */
+.gridiron{position:relative; height:42px; margin:0}
 .gridiron.tap{height:54px; cursor:pointer}
-/* turf: mown stripes every ten yards, then a light-to-dark wash for depth */
-.gridiron .turf{position:absolute; left:0; right:0; top:0; bottom:6px;
-  background:repeating-linear-gradient(90deg,#2e8b4c 0 9.0909%,#35994f 9.0909% 18.1818%)}
-.gridiron .turf::after{content:''; position:absolute; inset:0;
-  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(0,0,0,.20))}
-/* the front edge, inside the same height */
-.gridiron .edge{position:absolute; left:0; right:0; bottom:0; height:6px;
-  background:linear-gradient(180deg,#1f6b39,#17512b)}
-/* end zones — only as wide as the letters standing up in them */
-.gridiron .fz{position:absolute; top:0; bottom:6px; width:4.5455%; z-index:2;
-  display:flex; align-items:center; justify-content:center}
-.gridiron .fz.l{left:0} .gridiron .fz.r{right:0}
-.gridiron .fz span{color:#fff; font-size:.5rem; font-weight:800; letter-spacing:.08em;
-  writing-mode:vertical-rl; text-orientation:upright; line-height:1}
-.gridiron .fz.us{background:var(--ink)} .gridiron .fz.us span{color:#f4b74a}
-.gridiron .fz.them{background:#5b6472}
-/* yard lines, hashes and numbers */
-.gridiron .fl{position:absolute; top:0; bottom:6px; width:1px; background:rgba(255,255,255,.45)}
-.gridiron .fl.mid{width:2px; background:rgba(255,255,255,.75)}
-.gridiron .fh{position:absolute; height:4px; width:1px; background:rgba(255,255,255,.45)}
+.gridiron svg{display:block; width:100%; height:100%}
+/* the end-zone name stands inside its end zone and leans with it; the angle in
+   degrees depends on the rendered width, so layoutFields() sets it */
+.gridiron .ez{position:absolute; z-index:3; color:#fff; font-size:.5rem; font-weight:800;
+  letter-spacing:.08em; font-style:normal; writing-mode:vertical-rl;
+  text-orientation:upright; line-height:1; transform-origin:50% 50%; pointer-events:none}
+.gridiron .ez.gold{color:#f4b74a}
 .gridiron .fn{position:absolute; top:50%; transform:translate(-50%,-50%); pointer-events:none;
-  font-size:.5rem; font-weight:800; color:#fff; opacity:.65; font-style:normal}
+  font-size:.5rem; font-weight:800; color:#fff; opacity:.65; font-style:normal; z-index:3}
 .gridiron.tap .fn{font-size:.6rem}
 @media(max-width:560px){ .gridiron .fn:not(.key){display:none} }
-/* markers */
-.gridiron .flos{position:absolute; top:0; bottom:6px; width:0; margin-left:-1px; z-index:4;
-  border-left:2px dashed rgba(15,23,42,.92)}
-.gridiron .ffd{position:absolute; top:0; bottom:6px; width:3px; background:#facc15; z-index:4;
-  box-shadow:0 0 0 1px rgba(0,0,0,.25)}
-.gridiron .fchain{position:absolute; height:3px; background:#fff; border-radius:2px; z-index:4;
-  box-shadow:0 1px 2px rgba(0,0,0,.35)}
-.gridiron .fstick{position:absolute; width:9px; height:9px; margin:-4.5px 0 0 -4.5px;
-  border-radius:50%; background:#fff; z-index:5; box-shadow:0 1px 3px rgba(0,0,0,.4)}
-/* the ball is the badge — one marker, sitting on the line of scrimmage */
-.gridiron .fball{position:absolute; width:26px; height:26px; margin:-13px 0 0 -13px;
+/* the arrow: which way this offence is going, head on the line of scrimmage,
+   crest on the tail. One fixed length wherever the ball is. */
+.fovl{position:absolute; inset:0; pointer-events:none; z-index:5}
+.fovl .shaft{position:absolute; height:3px; background:#fff; transform:translateY(-50%);
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.fovl .head{position:absolute; width:0; height:0; transform:translateY(-50%);
+  border-top:7px solid transparent; border-bottom:7px solid transparent;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.fovl .head.r{border-left:9px solid #fff}
+.fovl .head.l{border-right:9px solid #fff}
+.fovl .fball{position:absolute; width:26px; height:26px; margin:-13px 0 0 -13px;
   border-radius:50%; background:var(--ink) center/cover no-repeat;
   background-image:url(data:image/png;base64,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);
   box-shadow:0 0 0 2px #fff, 0 1px 4px rgba(15,23,42,.5); z-index:6; font-size:0}
-.gridiron .fball.them{background-image:none; background-color:#5b6472;
+.fovl .fball.them{background-image:none; background-color:#5b6472;
   display:flex; align-items:center; justify-content:center; font-style:normal;
   font-size:.82rem; font-weight:800; color:#fff; letter-spacing:0}
-.gridiron.tap .fball{width:30px; height:30px; margin:-15px 0 0 -15px;
-  background-image:none; background-color:var(--go); font-size:.7rem; font-weight:800;
-  font-style:normal; color:#fff; display:flex; align-items:center; justify-content:center}
+/* on a picker the marker is the spot you are choosing, so it is the green disc
+   with the yard number — the crest is reserved for the ball actually in play */
+.fovl .fspot{position:absolute; width:30px; height:30px; margin:-15px 0 0 -15px;
+  border-radius:50%; background:var(--go); display:flex; align-items:center;
+  justify-content:center; font-size:.7rem; font-weight:800; color:#fff; font-style:normal;
+  box-shadow:0 0 0 2px #fff, 0 1px 4px rgba(15,23,42,.5); z-index:6}
+/* the two ball buttons sit over the end zone each team defends, so the control
+   is in the same place on screen as the team is on the field. They swap with
+   the end zones when the field is flipped. */
+.possrow{display:flex; align-items:center; gap:8px; margin-bottom:5px}
+.possrow .grow{flex:1}
+.possrow .mid{display:flex; gap:6px; flex:none}
+.pbtn{border:1.5px solid var(--line); background:var(--paper); border-radius:10px;
+  padding:7px 11px; font-size:.78rem; font-weight:800; color:var(--ink2); min-height:40px;
+  display:flex; align-items:center; gap:6px; white-space:nowrap}
+.pbtn .dot{width:9px; height:9px; border-radius:50%; background:#cbd5e1; flex:none}
+.pbtn.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.pbtn.on .dot{background:#fff}
+.pbtn.them.on{background:#5b6472; border-color:#5b6472}
+.lbl-short{display:none}
+/* all four will not fit at phone width, so the labels shorten rather than wrap */
+@media(max-width:460px){
+  .lbl-long{display:none} .lbl-short{display:inline}
+  .pbtn{padding:6px 8px; font-size:.7rem; min-height:36px}
+}
+/* flip sides stays under the strip: a once-a-quarter action has no business in
+   the row that gets touched every play */
+.fliprow{display:flex; align-items:center; gap:10px; margin-top:4px}
+.fliprow .grow{flex:1}
+/* The legend existed to explain a flat strip. The arrow says which way they
+   are going, the dashes say scrimmage and the yellow says line to gain, so on
+   a phone it is three lines of text restating the picture — and it pushed
+   Flip sides onto a line of its own. Kept on a wide screen, dropped here. */
+@media(max-width:560px){ #fieldKey{display:none} }
 .fieldkey{display:flex; gap:12px; font-size:.62rem; color:var(--muted); margin:0 0 2px}
 .fieldkey b{font-weight:700}
 .penlist{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:6px}
@@ -196,7 +218,13 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
 
 /* ---------- yardage keypad ---------- */
 .yardbox{display:flex; align-items:center; gap:10px; justify-content:center; margin:4px 0 10px}
-.yardval{font-size:2.6rem; font-weight:800; font-variant-numeric:tabular-nums; min-width:3.4ch; text-align:center}
+/* the number is a button now — tap it to type instead of stepping to it.
+   Styled to still read as a number, with a dashed underline as the only hint
+   that it does something, the same affordance .spotval already uses. */
+.yardval{font-size:2.6rem; font-weight:800; font-variant-numeric:tabular-nums;
+  min-width:3.4ch; text-align:center; border:0; background:transparent; color:var(--ink);
+  padding:0 6px 2px; border-bottom:2px dashed #94a3b8; border-radius:0; line-height:1.1}
+.yardval:active{background:#e8edf3}
 .yardval.neg{color:var(--bad)}
 .step{width:54px; height:54px; border-radius:14px; border:1.5px solid var(--line); background:var(--paper); font-size:1.5rem; font-weight:700}
 .pad{display:grid; grid-template-columns:repeat(5,1fr); gap:6px}
@@ -285,7 +313,9 @@ tr.keyrow td{font-weight:800; background:#f8fafc}
 .tagpill .tagy{display:inline-flex; align-items:center; gap:3px; background:#ffffff26; border-radius:14px; padding:2px}
 .tagpill .tagy span{width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;
   background:#ffffff2e; border-radius:50%; cursor:pointer; font-size:1rem}
-.tagpill .tagy i{font-style:normal; min-width:3ch; text-align:center; font-size:.78rem}
+.tagpill .tagy i{font-style:normal; min-width:3ch; text-align:center; font-size:.78rem;
+  border-bottom:1px dashed #ffffff8c; padding-bottom:1px}
+.tagpill .tagy i:active{background:#ffffff33; border-radius:4px}
 .pill{display:inline-block; padding:3px 9px; border-radius:20px; background:#e2e8f0; font-size:.72rem; font-weight:700}
 .pill.on{background:var(--go); color:#fff}
 .note{background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px 12px; font-size:.84rem; color:#1e3a8a}
@@ -534,17 +564,30 @@ td.num.short{color:var(--warn); font-weight:800}
 
     <div id="gameWrap">
       <div class="card" id="situationCard">
-        <div class="spread">
-          <div class="seg p" id="possSeg">
-            <button data-poss="us" class="on">Our ball</button>
-            <button data-poss="them">Their ball</button>
+        <!-- The two ball buttons sit over the end zone each team defends, so the
+             control is in the same place on screen as the team is on the field.
+             renderTop() fills in the names and swaps them when the field flips. -->
+        <div class="possrow" id="possRow">
+          <button class="pbtn" id="possA" data-poss="us"><i class="dot"></i><span></span></button>
+          <span class="grow"></span>
+          <div class="mid">
+            <button class="btn sm ghost" id="btnEditSit"><span class="lbl-long">Fix down /
+              spot</span><span class="lbl-short">Fix</span></button>
+            <button class="btn sm ghost" id="btnFinish"><span class="lbl-long">Finish
+              game</span><span class="lbl-short">Finish</span></button>
           </div>
-          <div class="row tight">
-            <button class="btn sm ghost" id="btnEditSit">Fix down / spot</button>
-            <button class="btn sm ghost" id="btnFinish">Finish game</button>
-          </div>
+          <span class="grow"></span>
+          <button class="pbtn" id="possB" data-poss="them"><i class="dot"></i><span></span></button>
         </div>
         <div id="fieldStrip"></div>
+        <div class="fliprow">
+          <!-- the legend is written here rather than inside #fieldStrip so it
+               can share a line with Flip sides instead of stacking above it -->
+          <span class="fieldkey" id="fieldKey"></span>
+          <span class="grow"></span>
+          <button class="btn xs ghost" id="btnFlipField"
+            title="Match the field you're looking at">&#8646; Flip sides</button>
+        </div>
       </div>
 
       <div id="qNudge"></div>
@@ -729,7 +772,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-112';
+const APP_VERSION = '2026.10.05-114';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1617,10 +1660,26 @@ function renderTop(){
   const s=g.sit;
   $('#sbUs').classList.toggle('has', s.poss==='us');
   $('#sbThem').classList.toggle('has', s.poss==='them');
-  $$('#possSeg button').forEach(b=>{
-    b.classList.toggle('on', b.dataset.poss===s.poss);
-    b.textContent = (b.dataset.poss==='us' ? usName() : themName()) + ' ball';
-  });
+  /* Each ball button belongs over the end zone its team defends, so when the
+     field flips the buttons change places with the end zones. A control that
+     disagreed with the picture under it would be worse than one parked in a
+     corner, which is what this replaced. */
+  const flipped = fieldFlipped();
+  const A = $('#possA'), B = $('#possB');
+  if(A && B){
+    const leftIsUs = !flipped;
+    const set = (el, side) => {
+      el.dataset.poss = side;
+      el.classList.toggle('on', s.poss === side);
+      el.classList.toggle('them', side === 'them');
+      const nm = side==='us' ? usName() : themName();
+      el.querySelector('span').innerHTML =
+        `<span class="lbl-long">${esc(nm)} ball</span><span class="lbl-short">${
+          esc(shortName(nm) || nm)}</span>`;
+    };
+    set(A, leftIsUs ? 'us' : 'them');
+    set(B, leftIsUs ? 'them' : 'us');
+  }
   $('#sitLine').textContent = sitText(s)+' · '+spotLabel(s.spot);
   $('#sitSub').textContent = (s.poss==='us'? usName()+' ball' : themName()+' ball')+' · '+qLabel(s.q);
   $('#btnQtr').textContent = qLabel(s.q);
@@ -1637,6 +1696,35 @@ function qLabel(q){ return q<=4 ? 'Q'+q : (q===5?'OT':'OT'+(q-4)); }
 const FIELD_EZ = 5, FIELD_SPAN = 110;
 function fieldPct(spot){ return (FIELD_EZ + clamp(spot,0,100)) / FIELD_SPAN * 100; }
 function spotFromPct(pct){ return clamp(Math.round(pct/100*FIELD_SPAN - FIELD_EZ), 0, 100); }
+
+/* =========================================================================
+   PERSPECTIVE
+
+   The strip is drawn as a trapezoid seen from slightly above: the top edge is
+   FIELD_TOP_RATIO of the bottom, so every line on the field fans from one
+   vanishing point — vertical at midfield, leaning hardest at the goal lines,
+   and in OPPOSITE directions at the two ends. (A skew leans everything the
+   same way and reads as a sheared rectangle, which is the thing this is not.)
+
+   `t` runs 0 at the top of the turf to 1 at the bottom. A yard line's position
+   therefore depends on how far down it you are looking, which matters twice:
+   drawing it, and working out which yard line a thumb landed on.
+   ========================================================================= */
+const FIELD_TOP_RATIO = 0.89;
+const fieldK = t => FIELD_TOP_RATIO + (1 - FIELD_TOP_RATIO) * clamp(t, 0, 1);
+/* percentage across the box of a field unit u (0..FIELD_SPAN) at depth t */
+function fieldUPct(u, t){ return (0.5 + (u/FIELD_SPAN - 0.5) * fieldK(t)) * 100; }
+/* and of a spot, at the strip's mid-height, which is where markers sit */
+function fieldSpotPct(spot, flip, t){
+  const v = clamp(spot, 0, 100);
+  return fieldUPct((flip ? 100 - v : v) + FIELD_EZ, t == null ? 0.5 : t);
+}
+/* the inverse, for a tap: un-project the x at the depth it was touched */
+function spotFromTap(xPct, t, flip){
+  const u = FIELD_SPAN * (0.5 + (xPct/100 - 0.5) / fieldK(t));
+  const spot = clamp(Math.round(u - FIELD_EZ), 0, 100);
+  return flip ? 100 - spot : spot;
+}
 function firstDownSpot(s){
   if(!s || s.down==null) return null;
   const fd = s.poss==='us' ? s.spot + s.dist : s.spot - s.dist;
@@ -1653,51 +1741,131 @@ function fieldFlipped(){
   const evenQuarter = ((g.sit.q || 1) % 2) === 0;
   return !!g.endsFlipped !== evenQuarter;      // XOR: ends change every quarter
 }
+let FIELD_UID = 0;
 function fieldHTML(o){
   const flip = !!o.flip;
-  const X = spot => (flip ? 100 - fieldPct(spot) : fieldPct(spot)).toFixed(3);
-  const cls = ['gridiron']; if(o.pick) cls.push('tap');
+  const H = o.pick ? 54 : 42, EDGE = 6, FH = H - EDGE;
+  const uid = 'fg' + (++FIELD_UID);
+  const P = (u, t) => fieldUPct(u, t).toFixed(3);
+  /* a line on the field leans with it: top and bottom x differ */
+  const vline = (u, stroke, w, dash, cls) =>
+    `<line${cls ? ` class="${cls}"` : ''} x1="${(fieldUPct(u,0)/100*1000).toFixed(1)}" y1="0"
+       x2="${(fieldUPct(u,1)/100*1000).toFixed(1)}" y2="${FH}" stroke="${stroke}"
+       stroke-width="${w}"${dash ? ` stroke-dasharray="${dash}"` : ''}
+       data-u="${u.toFixed(2)}"/>`;
+  const quad = (a, b, fill) =>
+    `<polygon fill="${fill}" points="${(fieldUPct(a,0)/100*1000).toFixed(1)},0
+       ${(fieldUPct(b,0)/100*1000).toFixed(1)},0 ${(fieldUPct(b,1)/100*1000).toFixed(1)},${FH}
+       ${(fieldUPct(a,1)/100*1000).toFixed(1)},${FH}"/>`;
+
+  let g = '';
+  // mown stripes every ten yards, the app's two greens
+  for(let u=FIELD_EZ; u<FIELD_SPAN-FIELD_EZ; u+=10)
+    g += quad(u, u+10, ((u-FIELD_EZ)/10)%2 ? '#2e8b4c' : '#35994f');
+  // end zones: ours navy, theirs slate, swapping when the field is flipped
+  g += quad(0, FIELD_EZ, flip ? '#5b6472' : '#0f172a');
+  g += quad(FIELD_SPAN-FIELD_EZ, FIELD_SPAN, flip ? '#0f172a' : '#5b6472');
+  for(let u=FIELD_EZ; u<=FIELD_SPAN-FIELD_EZ; u+=10)
+    g += vline(u, u===FIELD_SPAN/2 ? 'rgba(255,255,255,.75)' : 'rgba(255,255,255,.45)',
+               u===FIELD_SPAN/2 ? 2 : 1);
+  /* the depth wash has to be the SAME trapezoid as the field; as a full-width
+     rect it spilled past the slanted end-zone edges and left a squared-off
+     dark block in each corner that did not follow the angle */
+  g += quad(0, FIELD_SPAN, `url(#w${uid})`);
+  const U = spot => (flip ? 100 - clamp(spot,0,100) : clamp(spot,0,100)) + FIELD_EZ;
+  /* .ffd and .flos keep their class names even though they are SVG lines now:
+     they are what the suites and anything else looking for the two markers
+     query on, and the names still say what they are. */
+  if(o.fd != null)  g += vline(U(o.fd), '#facc15', 3, null, 'ffd');
+  if(o.los != null) g += vline(U(o.los), 'rgba(15,23,42,.92)', 2, '4 3', 'flos');
+
   let h = `<div class="fieldbox">`;
-  // the yard line rides above the badge, so it never sits on the turf
-  if(o.spot!=null) h += `<b class="fchip" style="left:${X(o.spot)}%">${esc(spotLabel(o.spot))}</b>`;
-  h += `<div class="${cls.join(' ')}"${o.pick?` data-fieldpick="${esc(o.pick)}"`:''}${flip?' data-flip="1"':''}>`;
-  h += `<div class="turf"></div>`;
-  h += `<div class="fz ${flip?'them':'us'} l"><span>${esc((flip?themShort():usShort()).slice(0,3))}</span></div>`;
-  h += `<div class="fz ${flip?'us':'them'} r"><span>${esc((flip?usShort():themShort()).slice(0,3))}</span></div>`;
+  if(o.spot!=null) h += `<b class="fchip" style="left:${fieldSpotPct(o.spot,flip)}%">${
+    esc(spotLabel(o.spot))}</b>`;
+  h += `<div class="gridiron${o.pick?' tap':''}"${
+    o.pick?` data-fieldpick="${esc(o.pick)}"`:''}${flip?' data-flip="1"':''}>`;
+  h += `<svg viewBox="0 0 1000 ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="w${uid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".20"/></linearGradient></defs>
+    ${g}<rect x="0" y="${FH}" width="1000" height="${EDGE}" fill="#1b6034"/></svg>`;
+
+  // end-zone names; layoutFields() leans each one with the zone it stands in
+  const ezl = flip ? themShort() : usShort(), ezr = flip ? usShort() : themShort();
+  h += `<b class="ez${flip?'':' gold'}" data-u="${FIELD_EZ/2}"
+     style="left:${P(FIELD_EZ/2,0.5)}%">${esc(ezl.slice(0,3))}</b>`;
+  h += `<b class="ez${flip?' gold':''}" data-u="${FIELD_SPAN-FIELD_EZ/2}"
+     style="left:${P(FIELD_SPAN-FIELD_EZ/2,0.5)}%">${esc(ezr.slice(0,3))}</b>`;
+
+  /* Arrow, crest and spot disc are HTML: the SVG is stretched to the width of
+     the box, so anything round inside it would come out an ellipse. The arrow
+     itself does not lean — it is a pointer laid over the picture. Its pixel
+     geometry depends on the rendered width, so layoutFields() finishes it. */
+  if(o.pick){
+    const n = Math.round(o.spot<=50 ? o.spot : 100-o.spot);
+    h += `<div class="fovl"><i class="fspot" style="left:${fieldSpotPct(o.spot,flip)}%;
+       top:${(FH/2).toFixed(1)}px">${n}</i></div>`;
+  } else if(o.spot != null){
+    const theirs = o.poss === 'them';
+    const rightward = (!theirs) !== flip;
+    const tail = clamp((theirs ? o.spot + FIELD_ARROW_YDS : o.spot - FIELD_ARROW_YDS), -4, 104);
+    h += `<div class="fovl" data-tip="${fieldSpotPct(o.spot,flip)}"
+       data-tail="${fieldSpotPct(tail,flip)}" data-dir="${rightward?1:-1}" data-fh="${FH}">
+       <div class="shaft"></div><div class="head"></div>
+       <i class="fball ${rightward?'r':'l'}${theirs?' them':''}">${
+         theirs?esc(themShort().slice(0,1)):''}</i></div>`;
+  }
+
   for(let y=10; y<=90; y+=10){
-    const at = X(y);
-    h += `<i class="fl${y===50?' mid':''}" style="left:${at}%"></i>`;
-    // numbered like a real field — counts down to whichever goal line is nearer.
-    // Only 20 / 50 / 20 survive on a narrow phone; the rest drop out via CSS.
-    const key = (y===20 || y===50 || y===80) ? ' key' : '';
-    h += `<b class="fn${key}" style="left:${at}%">${y<=50 ? y : 100-y}</b>`;
+    const n = y<=50 ? y : 100-y;
+    h += `<b class="fn${(n===20||n===50)?' key':''}" style="left:${
+      fieldSpotPct(y,flip)}%; top:${(FH/2).toFixed(1)}px">${n}</b>`;
   }
-  for(let y=5; y<=95; y+=5){
-    const at = X(y);
-    h += `<i class="fh" style="left:${at}%; top:22%"></i><i class="fh" style="left:${at}%; bottom:28%"></i>`;
-  }
-  if(o.fd!=null)   h += `<i class="ffd" style="left:${X(o.fd)}%"></i>`;
-  // the run to the sticks, drawn between the ball and the line to gain
-  if(o.spot!=null && o.fd!=null){
-    const a = parseFloat(X(o.spot)), b = parseFloat(X(o.fd));
-    h += `<i class="fchain" style="left:${Math.min(a,b)}%; width:${Math.abs(b-a)}%; top:calc(50% - 3px)"></i>`;
-    h += `<i class="fstick" style="left:${b}%; top:calc(50% - 3px)"></i>`;
-  }
-  if(o.los!=null)  h += `<i class="flos" style="left:${X(o.los)}%"></i>`;
-  if(o.spot!=null){
-    const rightward = (o.poss!=='them') !== flip;              // which way this offence is driving
-    // On a picker the marker means "the spot you are choosing", so it stays a
-    // plain numbered dot. The crest is reserved for the ball actually in play.
-    // our crest only rides on our own ball; theirs carries their initial
-    const theirs = o.poss==='them';
-    const side = theirs ? ' them' : '';
-    const label = o.pick ? String(Math.round(o.spot<=50 ? o.spot : 100-o.spot))
-                : (theirs ? esc(themShort().slice(0,1)) : '');
-    h += `<i class="fball ${rightward?'r':'l'}${side}" style="left:${X(o.spot)}%; top:calc(50% - 3px)">${label}</i>`;
-  }
-  h += `<div class="edge"></div>`;
   h += '</div></div>';
   return h;
+}
+
+/* One fixed length, every time: the arrow says which way this offence is
+   going and nothing else. 18 yards reads well without crowding either end. */
+const FIELD_ARROW_YDS = 18;
+
+/* Everything that has to be MEASURED rather than assumed happens here, after
+   layout: the end-zone lean in degrees and the arrow in pixels. Both depend on
+   how wide the box actually got, which is not known while building the string. */
+function layoutFields(root){
+  const scope = root || document;
+  scope.querySelectorAll('.gridiron').forEach(gi => {
+    const w = gi.clientWidth; if(!w) return;
+    const FH = gi.clientHeight - 6;
+    gi.querySelectorAll('.ez').forEach(el => {
+      const u = parseFloat(el.dataset.u);
+      const dx = (fieldUPct(u,1) - fieldUPct(u,0))/100 * w;
+      el.style.top = (FH/2) + 'px';
+      el.style.transform = `translate(-50%,-50%) rotate(${
+        (-Math.atan2(dx, FH) * 180 / Math.PI).toFixed(2)}deg)`;
+    });
+    const ovl = gi.querySelector('.fovl');
+    if(!ovl || !ovl.dataset.tip) return;
+    const tip = parseFloat(ovl.dataset.tip)/100 * w;
+    const dir = parseFloat(ovl.dataset.dir);
+    const ball = ovl.querySelector('.fball');
+    const R = 13, HEAD = 9, my = FH/2;
+    // the one exception to a fixed length: keep the crest on the picture
+    const tail = Math.max(R+1, Math.min(w-R-1, parseFloat(ovl.dataset.tail)/100 * w));
+    ball.style.left = tail + 'px'; ball.style.top = my + 'px';
+    const head = ovl.querySelector('.head'), shaft = ovl.querySelector('.shaft');
+    const from = tail + dir*(R+2), to = tip - dir*HEAD, run = (to - from) * dir;
+    head.className = 'head ' + (dir > 0 ? 'r' : 'l');
+    head.style.left = (dir > 0 ? tip - HEAD : tip) + 'px';
+    head.style.top = my + 'px';
+    head.style.display  = run > 1 ? '' : 'none';
+    shaft.style.display = run > 1 ? '' : 'none';
+    if(run > 1){
+      shaft.style.left = Math.min(from, to) + 'px';
+      shaft.style.width = run + 'px';
+      shaft.style.top = my + 'px';
+    }
+  });
 }
 function renderFieldStrip(){
   const box = $('#fieldStrip'); if(!box) return;
@@ -1705,17 +1873,13 @@ function renderFieldStrip(){
   if(!g){ box.innerHTML=''; return; }
   const s = g.sit;
   const flip = fieldFlipped();
-  const rightward = (s.poss==='us') !== flip;
-  // the dotted line marks the line of scrimmage; the ball sits on it
-  box.innerHTML = fieldHTML({ spot:s.spot, los:s.spot, fd:firstDownSpot(s), poss:s.poss, flip:flip }) +
-    `<div class="fieldkey">
-     <span><b style="color:${s.poss==='us'?'#0f172a':'#5b6472'}">&#9679;</b> ball on ${esc(spotLabel(s.spot))}</span>
+  // the dashed line marks the line of scrimmage; the arrow's head stops on it
+  box.innerHTML = fieldHTML({ spot:s.spot, los:s.spot, fd:firstDownSpot(s), poss:s.poss, flip:flip });
+  const key = $('#fieldKey');
+  if(key) key.innerHTML =
+    `<span><b>&#8212;&#9654;</b> which way they are going</span>
      <span><b>&#8942;</b> line of scrimmage</span>
-     <span><b style="color:#eab308">&#9474;</b> line to gain</span>
-     <span>${esc(s.poss==='us'?usName():themName())} driving ${rightward?'&rarr;':'&larr;'}</span>
-     <span class="grow"></span>
-     <button class="btn xs ghost" id="btnFlipField" title="Match the field you're looking at">&#8646; Flip sides</button>
-     </div>`;
+     <span><b style="color:#eab308">&#9474;</b> line to gain</span>`;
 }
 
 /* ---------- overtime ---------- */
@@ -2001,7 +2165,8 @@ function padHTML(val, field){
   const neg = (val||0)<0;
   let h=`<div class="yardbox">
       <button class="step" data-step="-1" data-field="${field}">&minus;</button>
-      <div class="yardval ${neg?'neg':''}">${val>0?'+':''}${val||0}</div>
+      <button class="yardval ${neg?'neg':''}" data-yedit="${field}|Yards|1"
+        title="Type it">${val>0?'+':''}${val||0}</button>
       <button class="step" data-step="1" data-field="${field}">+</button>
     </div><div class="pad">`;
   QUICK_YDS.forEach(v=>{ h+=`<button data-set="${v}" data-field="${field}" class="${v<0?'alt':''}">${v>0?'+':''}${v}</button>`; });
@@ -2175,7 +2340,9 @@ function defPanelHTML(){
   if(tags.length){
     h+='<div class="flags" style="margin-top:8px">'+tags.map((t,i)=>{
       let inner=`<b>${esc(t.s)}</b> #${esc(t.n)}`;
-      if(NEEDS_YDS[t.s]) inner += `<span class="tagy"><span data-tagy="${i},-1">&minus;</span><i>${t.y||0}y</i><span data-tagy="${i},1">+</span></span>`;
+      if(NEEDS_YDS[t.s]) inner += `<span class="tagy"><span data-tagy="${i},-1">&minus;</span>` +
+        `<i data-tagedit="${i}" title="Type it">${t.y||0}y</i>` +
+        `<span data-tagy="${i},1">+</span></span>`;
       return `<span class="tagpill">${inner}<span class="x" data-deltag="${i}">&times;</span></span>`;
     }).join('')+'</div>';
   }
@@ -2326,6 +2493,9 @@ function renderEntry(){
   if(g.status==='final' && !E){ box.innerHTML = finalHTML(g); return; }
   if(!E){ box.innerHTML = menuHTML(g); return; }
   box.innerHTML = formHTML(g);
+  /* the kick pickers are fields too, and their perspective maths needs real
+     pixel widths — same reason render() does this */
+  layoutFields($('#entry'));
 }
 
 /* A finished game stops accepting plays, so nobody accidentally logs next
@@ -2472,7 +2642,8 @@ function formHTML(g){
     h+=`<hr><h3>Distance (yards)</h3>
       <div class="yardbox">
         <button class="step" data-step="-1" data-field="fgDist">&minus;</button>
-        <div class="yardval">${p.fgDist||0}</div>
+        <button class="yardval" data-yedit="fgDist|Field goal distance|0"
+          title="Type it">${p.fgDist||0}</button>
         <button class="step" data-step="1" data-field="fgDist">+</button>
       </div>`;
     h+=`<div class="seg" style="margin-bottom:8px">
@@ -3072,12 +3243,55 @@ function clockClear(id){
   closeModal(); render();
   if(then) then(); else toast('Clock reading removed');
 }
-function askNumber(title, value, cb){
-  openModal(title, `<div class="field"><input type="number" id="askN" value="${value||0}" inputmode="numeric"></div>
-    <button class="btn p wide" id="askOK">OK</button>`, body=>{
-      const i=$('#askN',body); i.focus(); i.select();
-      $('#askOK',body).onclick=()=>{ const v=parseInt(i.value,10); closeModal(); cb(isNaN(v)?0:v); };
-      i.onkeydown=e=>{ if(e.key==='Enter') $('#askOK',body).click(); };
+/* =========================================================================
+   TYPING A NUMBER INSTEAD OF STEPPING TO IT
+
+   Every yardage in the app had a minus and a plus and nothing else, so a
+   23-yard gain was twenty-three taps — "its time consuming", and he is right.
+   The number itself is now the button: tap it and this opens.
+
+   `signed` puts a +/- toggle on it. Yardage on a play can be a loss, so there
+   it is on; a field goal distance and a tackle's yardage are magnitudes and
+   cannot be negative, so there it is off and the toggle does not appear. The
+   sign is kept separate from the digits on purpose — typing a minus into a
+   number field on a phone keyboard is its own small fight.
+
+   Deliberately only the toggle, the field and one button: the common yardages
+   already have a one-tap pad on the play form behind this, so repeating them
+   here would make the sheet twice as tall to say the same thing.
+   ========================================================================= */
+function askNumber(title, value, cb){ askYards(title, value, {}, cb); }
+
+function askYards(title, value, opts, cb){
+  opts = opts || {};
+  const lo = opts.min == null ? 0 : opts.min;
+  const hi = opts.max == null ? 999 : opts.max;
+  const v0 = value || 0;
+  let neg = opts.signed && v0 < 0;
+  openModal(title, `<div class="card" style="margin:0">
+      ${opts.signed ? `<div class="seg p" id="ayS" style="margin-bottom:10px; width:100%">
+        <button data-v="+" class="${neg?'':'on'}" style="flex:1">Gain &#43;</button>
+        <button data-v="-" class="${neg?'on':''}" style="flex:1">Loss &minus;</button>
+      </div>` : ''}
+      <div class="field"><input type="number" id="ayN" value="${Math.abs(v0)}"
+        inputmode="numeric" pattern="[0-9]*" min="${lo}" max="${hi}" step="1"
+        style="font-size:2rem; font-weight:800; text-align:center"></div>
+      <button class="btn p wide" id="ayOK">Set it</button>
+    </div>`, body => {
+      const i = $('#ayN', body);
+      setTimeout(() => { i.focus(); i.select(); }, 30);
+      if(opts.signed) $$('#ayS button', body).forEach(b => b.onclick = () => {
+        neg = b.dataset.v === '-';
+        $$('#ayS button', body).forEach(x => x.classList.toggle('on', x === b));
+        i.focus();
+      });
+      const go = () => {
+        let n = parseInt(i.value, 10); if(isNaN(n)) n = 0;
+        n = clamp(Math.abs(n), Math.abs(lo) === lo ? lo : 0, hi);
+        closeModal(); cb(neg ? -n : n);
+      };
+      $('#ayOK', body).onclick = go;
+      i.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); go(); } };
     });
 }
 
@@ -3128,6 +3342,9 @@ function render(){
     $('#devName').value=DB.deviceName||''; $('#teamName').value=DB.team.name||'';
     $('#ruleSack').checked = sackAsRush();
     $('#ruleTop').checked = trackTop(); }
+  /* the field's perspective maths needs real pixel widths, so it runs after
+     the markup is in the document rather than while it is being built */
+  layoutFields();
 }
 
 /* ---------- play descriptions ---------- */
@@ -3519,13 +3736,13 @@ function wire(){
   $('#btnQtr').onclick=()=>{ const g=game(); if(!g) return; g.sit.q = g.sit.q>=5?1:g.sit.q+1; save(); render(); };
   $('#btnEditSit').onclick=openSituation;
   $('#btnFinish').onclick=finishGame;
-  // the strip is redrawn constantly, so catch the flip button by delegation
-  $('#fieldStrip').addEventListener('click', e=>{
-    if(!e.target.closest('#btnFlipField')) return;
+  /* Flip sides lives in the card now rather than inside the strip, so it can
+     be bound directly — it used to be redrawn with the field on every render. */
+  $('#btnFlipField').onclick=()=>{
     const g=game(); if(!g) return;
     g.endsFlipped = !g.endsFlipped; save(); render();
     toast(fieldFlipped() ? usName()+' now defend the right' : usName()+' now defend the left');
-  });
+  };
   $('#btnAllPlays').onclick=()=>switchView('plays');
   $('#btnNewGame').onclick=()=>gameForm(null);
   $('#btnNewGameQuick').onclick=()=>gameForm(null);
@@ -3581,7 +3798,7 @@ function wire(){
     UI.statSide=b.dataset.s; $$('#statSide button').forEach(x=>x.classList.toggle('on',x===b)); renderStats(); };
   $('#seasonSide').onclick=e=>{ const b=e.target.closest('button'); if(!b) return;
     UI.seasonSide=b.dataset.s; $$('#seasonSide button').forEach(x=>x.classList.toggle('on',x===b)); renderSeason(); };
-  $('#possSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return;
+  $('#possRow').onclick=e=>{ const b=e.target.closest('.pbtn'); if(!b) return;
     const g=game(); if(!g) return;
     // mid-entry this should change the play you're working on, not just the game state
     if(E && UI.editingId) return switchPoss(b.dataset.poss);
@@ -3836,12 +4053,24 @@ function onEntryClick(e){
   const dt=t.closest('[data-deltag]'); if(dt){ p.def.splice(parseInt(dt.dataset.deltag,10),1); return renderEntry(); }
   const ty=t.closest('[data-tagy]'); if(ty){ const [i,d]=ty.dataset.tagy.split(',').map(Number);
     p.def[i].y=Math.max(0,(p.def[i].y||0)+d); return renderEntry(); }
+  /* the yardage on a tag is now typeable as well as steppable — a 53-yard
+     interception return was fifty-three taps */
+  const te=t.closest('[data-tagedit]'); if(te){
+    const i=parseInt(te.dataset.tagedit,10), tag=p.def[i]; if(!tag) return;
+    return askYards(tag.s+' #'+tag.n+' — yards', tag.y||0, {min:0, max:109},
+      v=>{ tag.y=Math.max(0,v); renderEntry(); }); }
   const fp=t.closest('[data-fieldpick]'); if(fp){
     const r=fp.getBoundingClientRect();
     const x=(e.clientX!=null? e.clientX : r.left+r.width/2) - r.left;
-    let pct = clamp(x/r.width*100, 0, 100);
-    if(fp.dataset.flip==='1') pct = 100 - pct;      // the picture is mirrored; the yard line isn't
-    p[fp.dataset.fieldpick] = spotFromPct(pct);
+    /* The field is drawn in perspective, so the same x is a different yard
+       line depending how far DOWN the slab you touched — nearer the top the
+       whole field is narrower. Un-project at the depth of the tap or the
+       picker is wrong by up to three yards at the ends. The 6 is the front
+       edge, which is not turf. */
+    const y=(e.clientY!=null? e.clientY : r.top+r.height/2) - r.top;
+    const depth = clamp(y / Math.max(1, r.height - 6), 0, 1);
+    const pct = clamp(x/r.width*100, 0, 100);
+    p[fp.dataset.fieldpick] = spotFromTap(pct, depth, fp.dataset.flip==='1');
     return renderEntry(); }
   const sd=t.closest('[data-side]'); if(sd){
     const bits=sd.dataset.side.split('|'), f=bits[0], side=bits[1];
@@ -3860,6 +4089,13 @@ function onEntryClick(e){
   const se=t.closest('[data-spotedit]'); if(se){
     const bits=se.dataset.spotedit.split('|'), f=bits[0], label=bits[1]||'Yard line';
     return askSpot(label, p[f], v=>{ p[f]=v; renderEntry(); }); }
+  /* tapping the number itself opens the keypad; the steppers still work for
+     a one-yard nudge, which is what they are actually good for */
+  const ye=t.closest('[data-yedit]'); if(ye){
+    const bits=ye.dataset.yedit.split('|');
+    return askYards(bits[1]||'Yards', p[bits[0]]||0,
+      {signed: bits[2]==='1', min: bits[2]==='1' ? -99 : 0, max: 109},
+      v=>{ p[bits[0]]=v; renderEntry(); }); }
   const st=t.closest('[data-step]'); if(st){ const f=st.dataset.field;
     p[f]=(p[f]||0)+parseInt(st.dataset.step,10); return renderEntry(); }
   const sv=t.closest('[data-set]'); if(sv){ p[sv.dataset.field]=parseInt(sv.dataset.set,10); return renderEntry(); }
