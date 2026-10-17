@@ -772,7 +772,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-115';
+const APP_VERSION = '2026.10.05-116';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -1152,7 +1152,17 @@ function driveResult(p, endQ, ended){
   if(isSafety(p)) return 'Safety';
   if(p.type==='fg') return p.fgGood ? 'Field goal' : 'Missed FG';
   if(p.type==='punt') return 'Punt';
-  if(p.type==='kickoff') return 'Kickoff';
+  /* A kickoff never ends the receiving side's possession — their drive is only
+     starting, which is why endsPossession ignores one. So a span that finishes
+     on a kickoff finished because the QUARTER did, and saying "Kickoff" both
+     mislabels it and blocks the stitcher below, which joins a drive across the
+     horn only when the earlier half reads "End of quarter".
+
+     Lakes 2026: Shrine took the kick with 2:16 left in the 3rd and scored in
+     the 4th. One possession, and the chart showed it as "Kickoff · 1 play"
+     followed by a separate 8-play drive — inflating the drive count and
+     dragging down the average drive length, which is the number a coach reads. */
+  if(p.type==='kickoff' && !endQ) return 'Kickoff';
   if(p.int || p.fumLost) return 'TO';
   if(endQ===2) return 'End of half';
   if(endQ===4) return 'End of game';
