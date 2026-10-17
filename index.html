@@ -143,7 +143,7 @@ hr{border:0; border-top:1px solid var(--line); margin:10px 0}
   font-size:.5rem; font-weight:800; color:#fff; opacity:.65; font-style:normal; z-index:3}
 .gridiron.tap .fn{font-size:.6rem}
 @media(max-width:560px){ .gridiron .fn:not(.key){display:none} }
-/* the arrow: which way this offence is going, head on the line of scrimmage,
+/* the arrow: which way this offense is going, head on the line of scrimmage,
    crest on the tail. One fixed length wherever the ball is. */
 .fovl{position:absolute; inset:0; pointer-events:none; z-index:5}
 .fovl .shaft{position:absolute; height:3px; background:#fff; transform:translateY(-50%);
@@ -772,7 +772,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-114';
+const APP_VERSION = '2026.10.05-115';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -789,7 +789,7 @@ const NEEDS_YDS = {INT:1, FR:1};
 /* the eight you use all night; the rest live behind "More" */
 const CORE_CODES = ['T','A','TFL','SK','INT','PD','FC','FR'];
 
-/* [name, yards, automatic first down when it's on the defence]
+/* [name, yards, automatic first down when it's on the defense]
    NFHS yardages — the ones you actually hear on a Friday night. */
 const PENALTIES = [
   ['False start', 5, 0],            ['Offside', 5, 0],
@@ -979,8 +979,16 @@ function endsPossession(p){
   if(!p || !consumesClock(p)) return false;
   /* A kickoff does not end anything: the return is the front of the receiving
      team's drive, and the clock has not moved since the score, so the reading
-     taken at the touchdown already marks where their possession starts. */
-  if(p.type==='kickoff') return false;
+     taken at the touchdown already marks where their possession starts.
+
+     Unless it was taken back for a score. Then the kick IS the end of a
+     possession, and on the OPENING kickoff of a game there is no earlier
+     touchdown to have anchored anything — so it is the only play that can
+     carry the reading. Lakes 2026 opened with a 57-yard return touchdown and
+     the first 2:07 of the quarter went to an unaccounted gap, because the one
+     play that needed a clock was the one play the editor refused to show the
+     clock card on. Covers a kick the kicking team recovers and scores on too. */
+  if(p.type==='kickoff') return !!(p.td || p.retTd);
   if(p.td || isSafety(p) || p.type==='fg' || p.type==='punt' || p.int || p.fumLost) return true;
   /* A note ends nothing. It has to be said out loud because the test below
      reads a difference between a play's side and the side holding the ball
@@ -997,7 +1005,7 @@ function endsPossession(p){
    OVERTIME
 
    NFHS, which is what Michigan plays: each team gets ONE series from the
-   defence's 10, first and goal, four downs. A turnover ends the series where
+   defense's 10, first and goal, four downs. A turnover ends the series where
    it happens — the ball is dead, there is no return and no return touchdown.
    After both teams have had a series the leader wins; level and they go
    again. And it is UNTIMED: no game clock, so no time of possession and no
@@ -1025,7 +1033,7 @@ function otRoundDone(plays, q){
   const done = otSeriesList(plays, q).filter(s => s.ended);
   return done.length >= 2 && done.some(s => s.poss==='us') && done.some(s => s.poss==='them');
 }
-/* First and goal on the defence's 10. We always attack 100, so their 10 is
+/* First and goal on the defense's 10. We always attack 100, so their 10 is
    the 90 when we have it and the 10 when they do. */
 function otSpot(poss){ return poss === 'us' ? 90 : 10; }
 function otSit(q, poss){ return { q:q, poss:poss, down:1, dist:10, spot:otSpot(poss) }; }
@@ -1202,7 +1210,7 @@ function playPoints(p){
   if(p.type==='fg' && p.fgGood) add(scorer,3);
   /* There used to be a second, separate route for a defensive score here, read
      but never written by anything. Its rule was "if a player was named the
-     defence scored, otherwise use whoever had the ball" — which would have put
+     defense scored, otherwise use whoever had the ball" — which would have put
      the six points on US the day we fumbled and THEY returned it, because we do
      not carry their jersey numbers and so could never name anybody.
 
@@ -1512,7 +1520,7 @@ function computeStats(g){
 
     /* ---- our defense (recorded on any play) ---- */
     /* A sack's yardage comes from the play, never from the tag. It is the
-       same fact as "Yards lost", so it cannot disagree with the offence's
+       same fact as "Yards lost", so it cannot disagree with the offense's
        book, and correcting the play afterwards corrects this with it. Shared
        between everyone tagged SK — two men on one sack is 7 yards between
        them, not 7 each — and handed out whole so the shares add up exactly. */
@@ -1825,7 +1833,7 @@ function fieldHTML(o){
   return h;
 }
 
-/* One fixed length, every time: the arrow says which way this offence is
+/* One fixed length, every time: the arrow says which way this offense is
    going and nothing else. 18 yards reads well without crowding either end. */
 const FIELD_ARROW_YDS = 18;
 
@@ -1883,7 +1891,7 @@ function renderFieldStrip(){
 }
 
 /* ---------- overtime ---------- */
-/* One question, asked once a round: who is on offence first. Everything after
+/* One question, asked once a round: who is on offense first. Everything after
    it — spotting the 10, switching sides when a series ends, counting the
    round out — the app does on its own. */
 function askOTFirst(q){
@@ -2124,7 +2132,7 @@ const ROLE_POS = {
   def:     ['DL','DE','DT','NT','NG','EDGE','LB','ILB','OLB','MLB','WLB','SLB',
             'DB','CB','S','FS','SS','SAF','NB','ATH','UTIL'],
   /* Who carried a recovered fumble or a pick into the end zone. Same men as the
-     defensive panel — it IS the defence, just the one of them who scored. */
+     defensive panel — it IS the defense, just the one of them who scored. */
   retBy:   ['DL','DE','DT','NT','NG','EDGE','LB','ILB','OLB','MLB','WLB','SLB',
             'DB','CB','S','FS','SS','SAF','NB','ATH','UTIL']
 };
@@ -2229,7 +2237,7 @@ function flagHTML(list){
 /* Offered only once the turnover is on — you cannot run back a ball you did
    not come up with, and an extra flag on every snap of the night is a cost. */
 function scoopFlag(p, ours){
-  /* Never in overtime: the ball is dead the moment the defence has it, so
+  /* Never in overtime: the ball is dead the moment the defense has it, so
      there is no return to record and no six points to award. */
   if((p.q||1) >= 5) return null;
   return ours
@@ -2301,7 +2309,7 @@ function scoopYards(p){
   const d = (p.def||[]).find(x=>x.s==='FR') || (p.def||[]).find(x=>x.s==='INT');
   if(d && !d.y) d.y = dist;
 }
-/* Our defence only earns stats when the other team has the ball — or when we
+/* Our defense only earns stats when the other team has the ball — or when we
    kick and cover. Anywhere else, defensive tags can't apply. */
 function showsDefPanel(type, poss){
   if(type==='punt' || type==='kickoff') return poss==='us';
@@ -2394,7 +2402,7 @@ function syncTurnoverFromTags(p){
     }
     return;
   }
-  if(p.poss==='us') return;                             // our own offence
+  if(p.poss==='us') return;                             // our own offense
   if(has('FR')){
     if(!p.fumLost){ p.fum=true; p.fumLost=true; p._toByTag=true; }
   } else if(p._toByTag && p.fumLost){
@@ -2472,7 +2480,7 @@ function switchPoss(poss){
   renderEntry();
 }
 function fgSuggest(s){ return Math.max(17, Math.round((100-s.spot)+17)); }
-/* automatic-first-down fouls only carry the first down when the defence commits them */
+/* automatic-first-down fouls only carry the first down when the defense commits them */
 function applyPenAuto(p){ p.autoFd = !!p.penAuto && (p.penOn||'us') !== p.poss; }
 /* start the yard-line pickers on a typical kick so most plays are one tap away */
 function initKickSpots(p, typical){
@@ -2622,7 +2630,7 @@ function formHTML(g){
     if(!isPunt) fl.push({k:'onside',label:'Onside',on:p.onside},
                         {k:'recovered',label:(ours?usName():themName())+' recovered',on:p.recovered},
                         {k:'oob',label:'Out of bounds',on:p.oob,kind:'danger'});
-    /* Not in overtime: the ball is dead where the defence gets it, so there
+    /* Not in overtime: the ball is dead where the defense gets it, so there
        is no return and no return touchdown to record. */
     if(!ours && (p.q||1) < 5) fl.push({k:'retTd',label:'Returned for TD',on:p.retTd,kind:'good'},
                       {k:'fumLost',label:'Fumble turnover',on:p.fumLost,kind:'danger'},
@@ -2778,15 +2786,15 @@ function formHTML(g){
 /* spells out exactly what the flag does, so nobody has to guess the sign */
 function penaltyPreviewHTML(){
   const p=E.p, on=p.penOn||'us';
-  const offence = (on === p.poss);
+  const offense = (on === p.poss);
   const yds = p.penYds||0;
   if(p.declined) return `<div class="note" style="margin:10px 0">Declined — no yardage, down and spot unchanged.</div>`;
   if(!yds) return `<div class="warnbox" style="margin:10px 0">Pick the penalty and the yardage.</div>`;
   const res = nextSit({q:p.q,poss:p.poss,down:p.down,dist:p.dist,spot:p.spot},
-                      Object.assign({}, p, {penOn:on, fd: !!p.autoFd && !offence}));
+                      Object.assign({}, p, {penOn:on, fd: !!p.autoFd && !offense}));
   const who = on==='us' ? usName() : themName();
-  const moved = offence ? `${who} loses ${yds}` : `${who==='us'?usName():who} gives up ${yds}`;
-  const gain = offence ? 'back' : 'forward';
+  const moved = offense ? `${who} loses ${yds}` : `${who==='us'?usName():who} gives up ${yds}`;
+  const gain = offense ? 'back' : 'forward';
   const off = p.poss==='us'?usName():themName();
   return `<div class="note" style="margin:10px 0">
     ${esc(who)} committed it, so ${esc(off)} moves ${gain} ${yds} ${plural(yds,'yard')} ·
@@ -2927,7 +2935,7 @@ function commitPlay(){
     p.fd = !!p.autoFd && (p.penOn !== p.poss);
   }
 
-  // last line of defence: never save tags the play can't justify
+  // last line of defense: never save tags the play can't justify
   if(p.def && p.def.length && !showsDefPanel(p.type==='sack'?'pass':p.type, p.poss)) p.def=[];
   const wasEdit = !!UI.editingId;
   if(wasEdit){
@@ -3018,7 +3026,7 @@ function nextSit(sit, p){
   if(p.type==='pat' || p.type==='note' || p.type==='penalty') return s;
   /* A series ends on a score, on a turnover, or on four downs. The turnover
      is the one that differs from regulation: the ball is dead where the
-     defence gets it, so there is nothing to place and nowhere to return it
+     defense gets it, so there is nothing to place and nowhere to return it
      to — the next series simply starts at the other 10. */
   const over = p.td || isSafety(p) || p.type==='fg' || p.int || p.fumLost
              || (s.poss !== p.poss);
@@ -3443,7 +3451,7 @@ function playHTML(p,i){
   /* Gold is for a score, red for a turnover, and a scoop-and-score is both.
      Red used to win because it is written second in the stylesheet, so the
      best play of the night was filed under bad news. Whoever got the points
-     decides the colour now: gold when they are ours, red when the turnover
+     decides the color now: gold when they are ours, red when the turnover
      cost us. A turnover with no score is red exactly as before. */
   const mine = p.td && scoredBy(p)==='us';
   if(p.td||(p.type==='fg'&&p.fgGood)) cls.push('score');
@@ -4647,7 +4655,7 @@ function renderSeason(){
       <tr><td>Penalties</td><td class="num">${t.penCount||0}</td></tr>
       <tr><td>Penalty yards</td><td class="num">${t.penYds||0}</td></tr>
       </tbody></table></div></div>`;
-    /* Scoring spans offence, defence and the kicking game, so it belongs with
+    /* Scoring spans offense, defense and the kicking game, so it belongs with
        the other whole-team tables — the same place the Stats tab keeps it. */
     h+=grp('Scoring', T(COLS.score, s.scoring, {empty:'None', hideEmpty:true}));
   }
@@ -4809,7 +4817,7 @@ function showHelp(){
     <p>Tap the code, then tap the jersey numbers who earned it. More than one player
     can be on the same play — two kids on a tackle is a solo and an assist, or two
     assists, whichever you saw.</p>
-    <p><b>The colours tell you where you are.</b> A player turns <b>blue</b> when he has
+    <p><b>The colors tell you where you are.</b> A player turns <b>blue</b> when he has
     the code you are on, and <b>gold</b> when he already has a different one — so you can
     see at a glance who is spoken for without reading the tag list.</p>
     <p><b>Tapped the wrong number?</b> Tap him again and the code comes back off. You can
