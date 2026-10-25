@@ -772,7 +772,7 @@ td.num.short{color:var(--warn); font-weight:800}
    ========================================================================= */
 'use strict';
 
-const APP_VERSION = '2026.10.05-116';
+const APP_VERSION = '2026.10.05-117';
 const LS = 'vfstats.db.v1';
 const STAT_CODES = [
   ['T','Tackle (solo)'],['A','Assisted tackle'],['TFL','Tackle for loss'],['SK','Sack'],
@@ -2319,10 +2319,23 @@ function scoopYards(p){
   const d = (p.def||[]).find(x=>x.s==='FR') || (p.def||[]).find(x=>x.s==='INT');
   if(d && !d.y) d.y = dist;
 }
-/* Our defense only earns stats when the other team has the ball — or when we
-   kick and cover. Anywhere else, defensive tags can't apply. */
+/* Our defense only earns stats when the other team has the ball — or on a kick,
+   where our own unit is on the field either way. Anywhere else, defensive tags
+   can't apply.
+
+   A punt is the play where that cuts both ways. On our punt it is the coverage
+   team making the tackle. On theirs it is the punt-block and return team, and
+   that is the ONLY place a blocked punt can be written down: BPT for the man
+   who blocked it, FR (which carries the run back as its yardage) for the man
+   who recovered it, and an ordinary tackle if they block-and-recover and we
+   bring the runner down. Hidden there until -117, which is why Everest play
+   #50 — #21 blocked it, #50 took it to the 14 — could record that the punt was
+   blocked but not by whom. A kickoff is not the same: nothing of ours gets
+   blocked on their kickoff, and an onside kick we come down with is already
+   handled by `recovered`. */
 function showsDefPanel(type, poss){
-  if(type==='punt' || type==='kickoff') return poss==='us';
+  if(type==='punt') return true;
+  if(type==='kickoff') return poss==='us';
   if(type==='penalty' || type==='note') return false;
   return poss==='them';
 }
@@ -4128,6 +4141,10 @@ function onEntryClick(e){
     if(k==='fumLost'&&!p[k] && p.type!=='punt' && p.type!=='kickoff' && !p.int){
       p.retTd=false; p.retBy=null; }
     if(k==='td'&&p[k]) p.fd=false;
+    /* Same idea as a sack going straight to SK: the only reason to tap
+       "blocked it" on their punt is to credit the man who did, so land on BPT
+       rather than making him hunt it out from behind More…. */
+    if(k==='blocked'&&p[k]&&p.type==='punt'&&p.poss!=='us') UI.defStat='BPT';
     if(k==='retTd'&&p[k]) scoopYards(p);   // fill in the run back it can work out
     return renderEntry(); }
   const rs=t.closest('[data-res]'); if(rs){ p.result=rs.dataset.res;
